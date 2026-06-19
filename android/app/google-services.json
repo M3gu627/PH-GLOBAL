@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "892347806970",
+    "project_id": "ph-global",
+    "storage_bucket": "ph-global.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:892347806970:android:0a7d42d38b8757ac4a4543",
+        "android_client_info": {
+          "package_name": "com.example.startup_app"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyDptWG8GP7_rXf3ieUlPEKJAo4pvuuibsY"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

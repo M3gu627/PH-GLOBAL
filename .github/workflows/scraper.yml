@@ -1,0 +1,27 @@
+name: DFA Slot Scraper
+
+on:
+  schedule:
+    - cron: '*/30 * * * *'  # runs every 30 minutes
+  workflow_dispatch:          # allows manual trigger from GitHub Actions tab
+
+jobs:
+  scrape:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: pip install requests beautifulsoup4
+
+      - name: Run scraper
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}
+          FCM_SERVER_KEY: ${{ secrets.FCM_SERVER_KEY }}
+        run: python scraper/dfa_scraper.py
