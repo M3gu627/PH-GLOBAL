@@ -44,13 +44,15 @@ def fetch_available_dates(slug):
     soup = BeautifulSoup(res.text, "html.parser")
 
     dates = []
-    for tag in soup.select(".available, .slot-date, td.success, td.open"):
+    for tag in soup.find_all("strong"):
         text = tag.get_text(strip=True)
-        try:
-            date = datetime.strptime(text, "%B %d, %Y").date()
-            dates.append(str(date))
-        except ValueError:
-            pass
+        if text.startswith("Earliest Date:"):
+            date_str = text.replace("Earliest Date:", "").strip()
+            try:
+                date = datetime.strptime(date_str, "%b %d, %Y").date()
+                dates.append(str(date))
+            except ValueError:
+                pass
 
     return dates
 
