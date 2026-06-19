@@ -1,10 +1,13 @@
 import os
+import json
 import requests
 from bs4 import BeautifulSoup
 from datetime import datetime
-import json
+import google.auth
+import google.auth.transport.requests
+from google.oauth2 import service_account
 
-# Config — add more locations as needed
+# Config
 DFA_LOCATIONS = [
     {"slug": "dfa-ncr-central", "label": "DFA NCR Central"},
     {"slug": "dfa-ncr-north",   "label": "DFA NCR North"},
@@ -15,24 +18,35 @@ DFA_LOCATIONS = [
 BASE_URL = "https://dfacalendar.netpinoy.com/philippines"
 SUPABASE_URL = os.environ["SUPABASE_URL"]
 SUPABASE_KEY = os.environ["SUPABASE_KEY"]
-FCM_SERVER_KEY = os.environ["FCM_SERVER_KEY"]
+FCM_SERVICE_ACCOUNT = json.loads(os.environ["FCM_SERVICE_ACCOUNT"])
+PROJECT_ID = "ph-global"
 
-HEADERS = {"apikey": SUPABASE_KEY, "Authorization": f"Bearer {SUPABASE_KEY}", "Content-Type": "application/json"}
+HEADERS = {
+    "apikey": SUPABASE_KEY,
+    "Authorization": f"Bearer {SUPABASE_KEY}",
+    "Content-Type": "application/json"
+}
+
+
+def get_fcm_access_token():
+    credentials = service_account.Credentials.from_service_account_info(
+        FCM_SERVICE_ACCOUNT,
+        scopes=["https://www.googleapis.com/auth/firebase.messaging"]
+    )
+    request = google.auth.transport.requests.Request()
+    credentials.refresh(request)
+    return credentials.token
 
 
 def fetch_available_dates(slug):
-    """Scrape available dates from dfacalendar.netpinoy.com for a given location."""
     url = f"{BASE_URL}/{slug}"
     res = requests.get(url, timeout=10)
     soup = BeautifulSoup(res.text, "html.parser")
 
     dates = []
-    # The site lists available dates as highlighted calendar cells or text
-    # Look for elements with class indicating availability
     for tag in soup.select(".available, .slot-date, td.success, td.open"):
         text = tag.get_text(strip=True)
         try:
-            # Try parsing date text — adjust format if needed after first test run
             date = datetime.strptime(text, "%B %d, %Y").date()
             dates.append(str(date))
         except ValueError:
@@ -42,7 +56,6 @@ def fetch_available_dates(slug):
 
 
 def get_current_slots():
-    """Fetch current DFA slots from Supabase."""
     res = requests.get(
         f"{SUPABASE_URL}/rest/v1/slots?agency_id=eq.dfa&select=slot_date",
         headers=HEADERS
@@ -68,7 +81,6 @@ def delete_slot(date):
 
 
 def get_subscribed_tokens():
-    """Get all FCM tokens subscribed to DFA."""
     res = requests.get(
         f"{SUPABASE_URL}/rest/v1/subscriptions?agency_id=eq.dfa&select=fcm_token",
         headers=HEADERS
@@ -76,36 +88,35 @@ def get_subscribed_tokens():
     return [row["fcm_token"] for row in res.json()]
 
 
-def send_push_notification(tokens, new_dates):
-    """Send FCM push to all subscribed tokens."""
+def send_push_notification(tokens, new_dates, access_token):
     if not tokens:
         print("No subscribers, skipping notification.")
         return
 
+    url = f"https://fcm.googleapis.com/v1/projects/{PROJECT_ID}/messages:send"
+    headers = {
+        "Authorization": f"Bearer {access_token}",
+        "Content-Type": "application/json"
+    }
+
     for token in tokens:
         payload = {
-            "to": token,
-            "notification": {
-                "title": "DFA Slot Available!",
-                "body": f"New slots open: {', '.join(new_dates)}",
-            },
-            "data": {"agency_id": "dfa"}
+            "message": {
+                "token": token,
+                "notification": {
+                    "title": "DFA Slot Available!",
+                    "body": f"New slots open: {', '.join(new_dates)}"
+                },
+                "data": {"agency_id": "dfa"}
+            }
         }
-        res = requests.post(
-            "https://fcm.googleapis.com/fcm/send",
-            headers={
-                "Authorization": f"key={FCM_SERVER_KEY}",
-                "Content-Type": "application/json"
-            },
-            json=payload
-        )
-        print(f"FCM response for {token[:20]}...: {res.status_code}")
+        res = requests.post(url, headers=headers, json=payload)
+        print(f"FCM response for {token[:20]}...: {res.status_code} {res.text}")
 
 
 def run():
     print(f"Scraper started at {datetime.now()}")
 
-    # Collect all available dates across all locations
     scraped_dates = set()
     for loc in DFA_LOCATIONS:
         dates = fetch_available_dates(loc["slug"])
@@ -118,13 +129,13 @@ def run():
 
     for date in new_dates:
         insert_slot(date)
-
     for date in removed_dates:
         delete_slot(date)
 
     if new_dates:
+        access_token = get_fcm_access_token()
         tokens = get_subscribed_tokens()
-        send_push_notification(tokens, list(new_dates))
+        send_push_notification(tokens, list(new_dates), access_token)
     else:
         print("No new slots found.")
 
