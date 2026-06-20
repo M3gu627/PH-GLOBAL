@@ -1,13 +1,12 @@
 import os
 import json
 import requests
-from bs4 import BeautifulSoup
 from datetime import datetime
+from playwright.sync_api import sync_playwright
 import google.auth
 import google.auth.transport.requests
 from google.oauth2 import service_account
 
-# Config
 DFA_LOCATIONS = [
     {"slug": "dfa-ncr-central", "label": "DFA NCR Central"},
     {"slug": "dfa-ncr-north",   "label": "DFA NCR North"},
@@ -38,27 +37,44 @@ def get_fcm_access_token():
     return credentials.token
 
 
-def fetch_available_dates(slug):
-    url = f"{BASE_URL}/{slug}"
-    res = requests.get(url, timeout=10)
-    soup = BeautifulSoup(res.text, "html.parser")
+def fetch_all_dates_playwright():
+    """Use headless browser to scrape all locations at once."""
+    dates = {loc["slug"]: [] for loc in DFA_LOCATIONS}
 
-    # Debug: print all strong tags
-    strongs = soup.find_all("strong")
-    print(f"[{slug}] Found {len(strongs)} strong tags:")
-    for s in strongs[:10]:  # print first 10 only
-        print(f"  -> {s.get_text(strip=True)}")
+    with sync_playwright() as p:
+        browser = p.chromium.launch()
+        page = browser.new_page()
 
-    dates = []
-    for tag in strongs:
-        text = tag.get_text(strip=True)
-        if text.startswith("Earliest Date:"):
-            date_str = text.replace("Earliest Date:", "").strip()
+        for loc in DFA_LOCATIONS:
+            slug = loc["slug"]
+            url = f"{BASE_URL}/{slug}"
+            print(f"Fetching {url}...")
+
+            page.goto(url, wait_until="networkidle", timeout=30000)
+
+            # Wait for content to load
             try:
-                date = datetime.strptime(date_str, "%b %d, %Y").date()
-                dates.append(str(date))
-            except ValueError:
-                pass
+                page.wait_for_selector("strong", timeout=10000)
+            except Exception:
+                print(f"  No strong tags found for {slug}")
+                continue
+
+            content = page.inner_text("body")
+            print(f"  Page text snippet: {content[:300]}")
+
+            # Look for "Earliest Date: Jul 22, 2026" pattern
+            for line in content.split("\n"):
+                line = line.strip()
+                if "Earliest Date:" in line:
+                    date_str = line.replace("Earliest Date:", "").strip()
+                    try:
+                        date = datetime.strptime(date_str, "%b %d, %Y").date()
+                        dates[slug].append(str(date))
+                        print(f"  Found date: {date}")
+                    except ValueError:
+                        pass
+
+        browser.close()
 
     return dates
 
@@ -119,15 +135,17 @@ def send_push_notification(tokens, new_dates, access_token):
             }
         }
         res = requests.post(url, headers=headers, json=payload)
-        print(f"FCM response for {token[:20]}...: {res.status_code} {res.text}")
+        print(f"FCM response for {token[:20]}...: {res.status_code}")
 
 
 def run():
     print(f"Scraper started at {datetime.now()}")
 
+    all_dates = fetch_all_dates_playwright()
+
     scraped_dates = set()
     for loc in DFA_LOCATIONS:
-        dates = fetch_available_dates(loc["slug"])
+        dates = all_dates[loc["slug"]]
         print(f"{loc['label']}: {dates}")
         scraped_dates.update(dates)
 
