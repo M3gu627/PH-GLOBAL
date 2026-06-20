@@ -2,7 +2,7 @@ import os
 import json
 import requests
 from datetime import datetime, date
-from bs4 import BeautifulSoup
+from playwright.sync_api import sync_playwright
 import google.auth
 import google.auth.transport.requests
 from google.oauth2 import service_account
@@ -23,135 +23,103 @@ SUPABASE_HEADERS = {
     "Content-Type": "application/json"
 }
 
-BROWSER_HEADERS = {
-    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-    "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
-    "Accept-Language": "en-US,en;q=0.5",
-}
 
-
-def get_csrf_token(html):
-    soup = BeautifulSoup(html, "html.parser")
-    token = soup.find("input", {"name": "__RequestVerificationToken"})
-    return token["value"] if token else None
-
-
-def create_session(site_id):
-    session = requests.Session()
-    session.headers.update(BROWSER_HEADERS)
-
-    # Step 1: GET homepage
-    res = session.get(f"{BASE_URL}/appointment", timeout=15)
-    print(f"Step 1 (homepage): {res.status_code} -> {res.url}")
-
-    # Step 2: POST terms
-    token = get_csrf_token(res.text)
-    if not token:
-        print("ERROR: No CSRF token on homepage")
-        return None
-
-    res = session.post(
-        f"{BASE_URL}/appointment/terms",
-        data={
-            "__RequestVerificationToken": token,
-            "agree": "on",
-            "groupType": "Individual",
-        },
-        headers={"Referer": f"{BASE_URL}/appointment"},
-        timeout=15
+def get_fcm_access_token():
+    credentials = service_account.Credentials.from_service_account_info(
+        FCM_SERVICE_ACCOUNT,
+        scopes=["https://www.googleapis.com/auth/firebase.messaging"]
     )
-    print(f"Step 2 (terms): {res.status_code} -> {res.url}")
-
-    # Step 3: POST site selection
-    token = get_csrf_token(res.text)
-    if not token:
-        print("ERROR: No CSRF token on site page")
-        return None
-
-    res = session.post(
-        f"{BASE_URL}/appointment/individual/site",
-        data={
-            "__RequestVerificationToken": token,
-            "SiteRegionID": "1",
-            "SiteCountryID": "1",
-            "SiteID": site_id,
-            "cl-notif-checkbox": "on",
-            "pubpow-notif-checkbox": "on",
-            "ofw-notif-checkbox": "on",
-            "renewal-notif-checkbox": "on",
-            "co-notif-checkbox": "on",
-            "NextStep": "schedule",
-            "CurrentStep": "site",
-            "PreviousStep": "",
-            "DraftApplicationCode": "",
-            "FirstName": "",
-            "MiddleName": "",
-            "LastName": "",
-            "Suffix": "",
-            "Gender": "",
-            "Birthday.Day": "",
-            "Birthday.Month": "",
-            "Birthday.Year": "",
-            "CivilStatus": "",
-            "BirthCountry": "",
-            "POBProvince": "",
-            "POBMunicipality": "",
-            "BirthRight": "",
-            "EmailAddress": "",
-            "MobileNumber": "",
-            "PhoneNumber": "",
-            "TimeSlotID": "",
-            "ScheduleDate": "",
-            "OffsetTicks": "0",
-        },
-        headers={"Referer": f"{BASE_URL}/appointment/individual/site"},
-        timeout=15
-    )
-    print(f"Step 3 (site selection): {res.status_code} -> {res.url}")
-
-    # Print first 10 fields to verify we advanced to schedule page
-    soup = BeautifulSoup(res.text, "html.parser")
-    inputs = soup.find_all(["input", "select"])
-    print("Step 3 landing fields (first 5):")
-    for inp in inputs[:5]:
-        print(f"  {inp.get('name')} = {inp.get('value')} (type={inp.get('type')})")
-
-    return session
+    request = google.auth.transport.requests.Request()
+    credentials.refresh(request)
+    return credentials.token
 
 
-def fetch_available_dates(session, site_id, site_name):
-    try:
-        today = date.today().strftime("%Y-%m-%d")
-        res = session.post(
-            f"{BASE_URL}/appointment/timeslot/available",
-            data={
-                "fromDate": today,
-                "toDate": "2026-12-31",
-                "siteId": site_id,
-                "requestedSlots": 1,
-            },
-            headers={
-                "Referer": f"{BASE_URL}/appointment/individual/schedule",
-                "X-Requested-With": "XMLHttpRequest",
-                "Accept": "application/json, text/javascript, */*; q=0.01",
-                "Content-Type": "application/x-www-form-urlencoded; charset=UTF-8",
-            },
-            timeout=15
+def fetch_all_dates():
+    """Use Playwright to go through DFA appointment flow and collect available dates."""
+    results = {}
+
+    with sync_playwright() as p:
+        browser = p.chromium.launch(args=["--no-sandbox"])
+        context = browser.new_context(
+            user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
         )
-        print(f"  Availability for {site_name}: {res.status_code} -> {res.text[:300]}")
 
-        if not res.text.strip() or res.text.strip() in ["null", "[]"]:
-            return []
+        for site in DFA_SITES:
+            site_id = site["id"]
+            site_name = site["name"]
+            available_dates = []
 
-        slots = res.json()
-        return [
-            datetime.utcfromtimestamp(s["AppointmentDate"] / 1000).strftime("%Y-%m-%d")
-            for s in slots if s.get("IsAvailable")
-        ]
+            try:
+                page = context.new_page()
 
-    except Exception as e:
-        print(f"  Error for {site_name}: {e}")
-        return []
+                # Intercept the availability API response
+                api_response = []
+                def handle_response(response):
+                    if "timeslot/available" in response.url:
+                        try:
+                            data = response.json()
+                            api_response.extend(data)
+                            print(f"  Intercepted {len(data)} slots for {site_name}")
+                        except Exception as e:
+                            print(f"  Could not parse timeslot response: {e}")
+
+                page.on("response", handle_response)
+
+                # Step 1: Go to appointment page and agree to terms
+                print(f"\nProcessing {site_name}...")
+                page.goto(f"{BASE_URL}/appointment", wait_until="domcontentloaded", timeout=30000)
+                page.wait_for_timeout(1000)
+
+                # Check the agree checkbox and click Individual
+                page.check("#agree")
+                page.click("button[value='Individual']")
+                page.wait_for_url("**/individual/site", timeout=15000)
+                print(f"  Reached site selection page")
+
+                # Step 2: Select region, country, and site
+                page.select_option("select[name='SiteRegionID']", "1")
+                page.wait_for_timeout(1000)
+
+                page.select_option("select[name='SiteCountryID']", "1")
+                page.wait_for_timeout(1000)
+
+                page.select_option("select[name='SiteID']", site_id)
+                page.wait_for_timeout(1000)
+
+                # Check all notification checkboxes
+                for cb in ["cl-notif-checkbox", "pubpow-notif-checkbox",
+                           "ofw-notif-checkbox", "renewal-notif-checkbox", "co-notif-checkbox"]:
+                    try:
+                        page.check(f"#{cb}")
+                    except Exception:
+                        pass
+
+                # Click Next
+                page.click("input[value='Next'], button:has-text('Next')")
+                page.wait_for_url("**/individual/schedule", timeout=15000)
+                print(f"  Reached schedule page")
+
+                # Wait for availability API call to complete
+                page.wait_for_timeout(5000)
+
+                # Parse available dates from intercepted response
+                available_dates = [
+                    datetime.utcfromtimestamp(s["AppointmentDate"] / 1000).strftime("%Y-%m-%d")
+                    for s in api_response if s.get("IsAvailable")
+                ]
+                print(f"  Available dates: {available_dates}")
+
+            except Exception as e:
+                print(f"  Error for {site_name}: {e}")
+
+            finally:
+                page.close()
+
+            results[site_id] = available_dates
+
+        browser.close()
+
+    return results
 
 
 def get_current_slots():
@@ -187,16 +155,6 @@ def get_subscribed_tokens():
     return [row["fcm_token"] for row in res.json()]
 
 
-def get_fcm_access_token():
-    credentials = service_account.Credentials.from_service_account_info(
-        FCM_SERVICE_ACCOUNT,
-        scopes=["https://www.googleapis.com/auth/firebase.messaging"]
-    )
-    request = google.auth.transport.requests.Request()
-    credentials.refresh(request)
-    return credentials.token
-
-
 def send_push_notification(tokens, new_dates, access_token):
     if not tokens:
         print("No subscribers, skipping notification.")
@@ -225,16 +183,11 @@ def send_push_notification(tokens, new_dates, access_token):
 def run():
     print(f"Scraper started at {datetime.now()}")
 
+    all_results = fetch_all_dates()
+
     scraped_dates = set()
-    for site in DFA_SITES:
-        session = create_session(site["id"])
-        if not session:
-            print(f"Skipping {site['name']}, could not create session")
-            continue
-        dates = fetch_available_dates(session, site["id"], site["name"])
-        if dates:
-            print(f"  {site['name']}: {dates}")
-            scraped_dates.update(dates)
+    for dates in all_results.values():
+        scraped_dates.update(dates)
 
     print(f"Total available dates found: {len(scraped_dates)}")
 
