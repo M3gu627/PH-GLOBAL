@@ -7,8 +7,6 @@ import google.auth
 import google.auth.transport.requests
 from google.oauth2 import service_account
 
-
-# Testing with one site first
 DFA_SITES = [
     {"id": "5", "name": "DFA NCR Central (Robinsons Galleria Ortigas, Quezon City)"},
 ]
@@ -69,16 +67,27 @@ def create_session():
 
 def fetch_available_dates(session, site_id, site_name):
     try:
-        # Re-fetch schedule page fresh for each site
         res = session.get(
             f"{BASE_URL}/appointment/individual/schedule",
             timeout=15
         )
-        print(f" Schedule page: {res.status_code} -> {res.url}")
+        print(f"  Schedule page: {res.status_code} -> {res.url}")
+
+        # Dump all form fields so we can see exactly what's needed
+        soup = BeautifulSoup(res.text, "html.parser")
+        form = soup.find("form")
+        if form:
+            inputs = form.find_all(["input", "select"])
+            print(f"  Form fields for {site_name}:")
+            for inp in inputs:
+                print(f"    {inp.get('name')} = {inp.get('value')} (type={inp.get('type')})")
+        else:
+            print(f"  No form found, page snippet: {res.text[500:1000]}")
+            return []
 
         token = get_csrf_token(res.text)
         if not token:
-            print(f" No CSRF token for {site_name}")
+            print(f"  No CSRF token for {site_name}")
             return []
 
         # POST site selection
@@ -95,10 +104,9 @@ def fetch_available_dates(session, site_id, site_name):
             timeout=15,
             allow_redirects=True
         )
-        print(f" After site POST: {res.status_code} -> {res.url}")
-        print(f" Page snippet: {res.text[200:500]}")
+        print(f"  After site POST: {res.status_code} -> {res.url}")
 
-        # POST to availability API
+        # POST to availability API with XHR headers
         today = date.today().strftime("%Y-%m-%d")
         res = session.post(
             f"{BASE_URL}/appointment/timeslot/available",
@@ -116,7 +124,7 @@ def fetch_available_dates(session, site_id, site_name):
             },
             timeout=15
         )
-        print(f" Availability: {res.status_code} -> {res.text[:300]}")
+        print(f"  Availability: {res.status_code} -> {res.text[:300]}")
 
         if not res.text.strip() or res.text.strip() in ["null", "[]"]:
             return []
@@ -128,7 +136,7 @@ def fetch_available_dates(session, site_id, site_name):
         ]
 
     except Exception as e:
-        print(f" Error for {site_name}: {e}")
+        print(f"  Error for {site_name}: {e}")
         return []
 
 
@@ -146,7 +154,7 @@ def insert_slot(date_str):
         headers=SUPABASE_HEADERS,
         json={"agency_id": "dfa", "slot_date": date_str}
     )
-    print(f" Inserted: {date_str}")
+    print(f"  Inserted: {date_str}")
 
 
 def delete_slot(date_str):
@@ -154,7 +162,7 @@ def delete_slot(date_str):
         f"{SUPABASE_URL}/rest/v1/slots?agency_id=eq.dfa&slot_date=eq.{date_str}",
         headers=SUPABASE_HEADERS
     )
-    print(f" Deleted: {date_str}")
+    print(f"  Deleted: {date_str}")
 
 
 def get_subscribed_tokens():
@@ -197,7 +205,7 @@ def send_push_notification(tokens, new_dates, access_token):
             }
         }
         res = requests.post(url, headers=headers, json=payload)
-        print(f" FCM {token[:20]}...: {res.status_code}")
+        print(f"  FCM {token[:20]}...: {res.status_code}")
 
 
 def run():
@@ -212,7 +220,7 @@ def run():
     for site in DFA_SITES:
         dates = fetch_available_dates(session, site["id"], site["name"])
         if dates:
-            print(f" {site['name']}: {dates}")
+            print(f"  {site['name']}: {dates}")
             scraped_dates.update(dates)
 
     print(f"Total available dates found: {len(scraped_dates)}")
