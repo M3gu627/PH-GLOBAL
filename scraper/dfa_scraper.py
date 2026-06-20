@@ -43,8 +43,14 @@ def fetch_available_dates(slug):
     res = requests.get(url, timeout=10)
     soup = BeautifulSoup(res.text, "html.parser")
 
+    # Debug: print all strong tags
+    strongs = soup.find_all("strong")
+    print(f"[{slug}] Found {len(strongs)} strong tags:")
+    for s in strongs[:10]:  # print first 10 only
+        print(f"  -> {s.get_text(strip=True)}")
+
     dates = []
-    for tag in soup.find_all("strong"):
+    for tag in strongs:
         text = tag.get_text(strip=True)
         if text.startswith("Earliest Date:"):
             date_str = text.replace("Earliest Date:", "").strip()
