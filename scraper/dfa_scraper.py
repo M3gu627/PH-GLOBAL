@@ -38,7 +38,6 @@ def get_fcm_access_token():
 
 
 def fetch_all_dates_playwright():
-    """Use headless browser to scrape all locations at once."""
     dates = {loc["slug"]: [] for loc in DFA_LOCATIONS}
 
     with sync_playwright() as p:
@@ -50,29 +49,27 @@ def fetch_all_dates_playwright():
             url = f"{BASE_URL}/{slug}"
             print(f"Fetching {url}...")
 
-            page.goto(url, wait_until="networkidle", timeout=30000)
-
-            # Wait for content to load
             try:
-                page.wait_for_selector("strong", timeout=10000)
-            except Exception:
-                print(f"  No strong tags found for {slug}")
+                page.goto(url, wait_until="domcontentloaded", timeout=60000)
+                page.wait_for_timeout(5000)
+
+                content = page.inner_text("body")
+                print(f"  Snippet: {content[:300]}")
+
+                for line in content.split("\n"):
+                    line = line.strip()
+                    if "Earliest Date:" in line:
+                        date_str = line.replace("Earliest Date:", "").strip()
+                        try:
+                            date = datetime.strptime(date_str, "%b %d, %Y").date()
+                            dates[slug].append(str(date))
+                            print(f"  Found date: {date}")
+                        except ValueError:
+                            pass
+
+            except Exception as e:
+                print(f"  Error fetching {slug}: {e}")
                 continue
-
-            content = page.inner_text("body")
-            print(f"  Page text snippet: {content[:300]}")
-
-            # Look for "Earliest Date: Jul 22, 2026" pattern
-            for line in content.split("\n"):
-                line = line.strip()
-                if "Earliest Date:" in line:
-                    date_str = line.replace("Earliest Date:", "").strip()
-                    try:
-                        date = datetime.strptime(date_str, "%b %d, %Y").date()
-                        dates[slug].append(str(date))
-                        print(f"  Found date: {date}")
-                    except ValueError:
-                        pass
 
         browser.close()
 
