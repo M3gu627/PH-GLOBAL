@@ -7,6 +7,7 @@ import google.auth
 import google.auth.transport.requests
 from google.oauth2 import service_account
 
+
 DFA_SITES = [
     {"id": "5", "name": "DFA NCR Central (Robinsons Galleria Ortigas, Quezon City)"},
 ]
@@ -40,11 +41,9 @@ def create_session():
     session = requests.Session()
     session.headers.update(BROWSER_HEADERS)
 
-    # Step 1: GET homepage
     res = session.get(f"{BASE_URL}/appointment", timeout=15)
     print(f"Step 1 (homepage): {res.status_code} -> {res.url}")
 
-    # Step 2: POST terms agreement
     token = get_csrf_token(res.text)
     if not token:
         print("ERROR: No CSRF token on homepage")
@@ -61,6 +60,13 @@ def create_session():
         timeout=15
     )
     print(f"Step 2 (terms): {res.status_code} -> {res.url}")
+
+    # Debug: print all fields on the landing page after terms
+    soup = BeautifulSoup(res.text, "html.parser")
+    inputs = soup.find_all(["input", "select"])
+    print("Landing page fields after terms POST:")
+    for inp in inputs:
+        print(f"  {inp.get('name')} = {inp.get('value')} (type={inp.get('type')})")
 
     return session
 
