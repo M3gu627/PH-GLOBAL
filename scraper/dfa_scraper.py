@@ -7,7 +7,6 @@ import google.auth
 import google.auth.transport.requests
 from google.oauth2 import service_account
 
-
 DFA_SITES = [
     {"id": "5", "name": "DFA NCR Central (Robinsons Galleria Ortigas, Quezon City)"},
 ]
@@ -37,13 +36,15 @@ def get_csrf_token(html):
     return token["value"] if token else None
 
 
-def create_session():
+def create_session(site_id):
     session = requests.Session()
     session.headers.update(BROWSER_HEADERS)
 
+    # Step 1: GET homepage
     res = session.get(f"{BASE_URL}/appointment", timeout=15)
     print(f"Step 1 (homepage): {res.status_code} -> {res.url}")
 
+    # Step 2: POST terms
     token = get_csrf_token(res.text)
     if not token:
         print("ERROR: No CSRF token on homepage")
@@ -61,11 +62,58 @@ def create_session():
     )
     print(f"Step 2 (terms): {res.status_code} -> {res.url}")
 
-    # Debug: print all fields on the landing page after terms
+    # Step 3: POST site selection
+    token = get_csrf_token(res.text)
+    if not token:
+        print("ERROR: No CSRF token on site page")
+        return None
+
+    res = session.post(
+        f"{BASE_URL}/appointment/individual/site",
+        data={
+            "__RequestVerificationToken": token,
+            "SiteRegionID": "1",
+            "SiteCountryID": "1",
+            "SiteID": site_id,
+            "cl-notif-checkbox": "on",
+            "pubpow-notif-checkbox": "on",
+            "ofw-notif-checkbox": "on",
+            "renewal-notif-checkbox": "on",
+            "co-notif-checkbox": "on",
+            "NextStep": "schedule",
+            "CurrentStep": "site",
+            "PreviousStep": "",
+            "DraftApplicationCode": "",
+            "FirstName": "",
+            "MiddleName": "",
+            "LastName": "",
+            "Suffix": "",
+            "Gender": "",
+            "Birthday.Day": "",
+            "Birthday.Month": "",
+            "Birthday.Year": "",
+            "CivilStatus": "",
+            "BirthCountry": "",
+            "POBProvince": "",
+            "POBMunicipality": "",
+            "BirthRight": "",
+            "EmailAddress": "",
+            "MobileNumber": "",
+            "PhoneNumber": "",
+            "TimeSlotID": "",
+            "ScheduleDate": "",
+            "OffsetTicks": "0",
+        },
+        headers={"Referer": f"{BASE_URL}/appointment/individual/site"},
+        timeout=15
+    )
+    print(f"Step 3 (site selection): {res.status_code} -> {res.url}")
+
+    # Print first 10 fields to verify we advanced to schedule page
     soup = BeautifulSoup(res.text, "html.parser")
     inputs = soup.find_all(["input", "select"])
-    print("Landing page fields after terms POST:")
-    for inp in inputs:
+    print("Step 3 landing fields (first 5):")
+    for inp in inputs[:5]:
         print(f"  {inp.get('name')} = {inp.get('value')} (type={inp.get('type')})")
 
     return session
@@ -73,46 +121,6 @@ def create_session():
 
 def fetch_available_dates(session, site_id, site_name):
     try:
-        res = session.get(
-            f"{BASE_URL}/appointment/individual/schedule",
-            timeout=15
-        )
-        print(f"  Schedule page: {res.status_code} -> {res.url}")
-
-        # Dump all form fields so we can see exactly what's needed
-        soup = BeautifulSoup(res.text, "html.parser")
-        form = soup.find("form")
-        if form:
-            inputs = form.find_all(["input", "select"])
-            print(f"  Form fields for {site_name}:")
-            for inp in inputs:
-                print(f"    {inp.get('name')} = {inp.get('value')} (type={inp.get('type')})")
-        else:
-            print(f"  No form found, page snippet: {res.text[500:1000]}")
-            return []
-
-        token = get_csrf_token(res.text)
-        if not token:
-            print(f"  No CSRF token for {site_name}")
-            return []
-
-        # POST site selection
-        res = session.post(
-            f"{BASE_URL}/appointment/individual/schedule",
-            data={
-                "__RequestVerificationToken": token,
-                "CurrentStep": "site",
-                "PreviousStep": "",
-                "SiteID": site_id,
-                "co-notif-checkbox": "on",
-            },
-            headers={"Referer": f"{BASE_URL}/appointment/individual/schedule"},
-            timeout=15,
-            allow_redirects=True
-        )
-        print(f"  After site POST: {res.status_code} -> {res.url}")
-
-        # POST to availability API with XHR headers
         today = date.today().strftime("%Y-%m-%d")
         res = session.post(
             f"{BASE_URL}/appointment/timeslot/available",
@@ -130,7 +138,7 @@ def fetch_available_dates(session, site_id, site_name):
             },
             timeout=15
         )
-        print(f"  Availability: {res.status_code} -> {res.text[:300]}")
+        print(f"  Availability for {site_name}: {res.status_code} -> {res.text[:300]}")
 
         if not res.text.strip() or res.text.strip() in ["null", "[]"]:
             return []
@@ -217,13 +225,12 @@ def send_push_notification(tokens, new_dates, access_token):
 def run():
     print(f"Scraper started at {datetime.now()}")
 
-    session = create_session()
-    if not session:
-        print("ERROR: Could not create session, aborting.")
-        return
-
     scraped_dates = set()
     for site in DFA_SITES:
+        session = create_session(site["id"])
+        if not session:
+            print(f"Skipping {site['name']}, could not create session")
+            continue
         dates = fetch_available_dates(session, site["id"], site["name"])
         if dates:
             print(f"  {site['name']}: {dates}")
