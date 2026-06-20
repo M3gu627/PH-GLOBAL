@@ -2,11 +2,11 @@ import os
 import json
 import requests
 from datetime import datetime, date
+from bs4 import BeautifulSoup
 import google.auth
 import google.auth.transport.requests
 from google.oauth2 import service_account
 
-# All official DFA sites with their IDs
 DFA_SITES = [
     {"id": "10",  "name": "Angeles (SM City Clark, Angeles City)"},
     {"id": "486", "name": "Antipolo (SM Center, Antipolo City, Rizal)"},
@@ -18,7 +18,7 @@ DFA_SITES = [
     {"id": "15",  "name": "Cagayan De Oro (BPO Tower SM Downtown Premier)"},
     {"id": "16",  "name": "Calasiao (Robinsons Calasiao, Pangasinan)"},
     {"id": "702", "name": "Candon (Candon City Arena)"},
-    {"id": "17",  "name": "Cebu (ROBINSONS GALLERIA, CEBU CITY)"},
+    {"id": "17",  "name": "Cebu (Robinsons Galleria, Cebu City)"},
     {"id": "487", "name": "Clarin (Town Center, Clarin, Misamis OCC)"},
     {"id": "4",   "name": "DFA Manila (Aseana)"},
     {"id": "5",   "name": "DFA NCR Central (Robinsons Galleria Ortigas, Quezon City)"},
@@ -31,10 +31,9 @@ DFA_SITES = [
     {"id": "19",  "name": "Davao (SM City Davao)"},
     {"id": "20",  "name": "Dumaguete (Robinsons Dumaguete)"},
     {"id": "21",  "name": "General Santos (Robinsons Gen. Santos City)"},
-    {"id": "488", "name": "Ilocos Norte (Robinsons Place, San Nicolas)"},
     {"id": "22",  "name": "Iloilo (Robinsons Iloilo)"},
     {"id": "690", "name": "Kidapawan (Kidapawan City)"},
-    {"id": "23",  "name": "La Union (CSI Mall San Fernando, La Union)"},
+    {"id": "23",  "name": "La Union (CSI Mall San Fernando)"},
     {"id": "24",  "name": "Legazpi (Pacific Mall Legazpi)"},
     {"id": "13",  "name": "Lipa (Robinsons Lipa)"},
     {"id": "25",  "name": "Lucena (Pacific Mall, Lucena)"},
@@ -52,6 +51,7 @@ DFA_SITES = [
     {"id": "30",  "name": "Zamboanga (Go-Velayo Bldg. Vet. Ave. Zambo)"},
 ]
 
+BASE_URL = "https://passport.gov.ph"
 SUPABASE_URL = os.environ["SUPABASE_URL"]
 SUPABASE_KEY = os.environ["SUPABASE_KEY"]
 FCM_SERVICE_ACCOUNT = json.loads(os.environ["FCM_SERVICE_ACCOUNT"])
@@ -63,41 +63,100 @@ SUPABASE_HEADERS = {
     "Content-Type": "application/json"
 }
 
-DFA_API_URL = "https://passport.gov.ph/appointment/timeslot/available"
-DFA_HEADERS = {
-    "Content-Type": "application/x-www-form-urlencoded",
-    "Referer": "https://passport.gov.ph/appointment/individual/schedule",
+BROWSER_HEADERS = {
     "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+    "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+    "Accept-Language": "en-US,en;q=0.5",
 }
 
 
-def get_fcm_access_token():
-    credentials = service_account.Credentials.from_service_account_info(
-        FCM_SERVICE_ACCOUNT,
-        scopes=["https://www.googleapis.com/auth/firebase.messaging"]
+def get_csrf_token(session, html):
+    soup = BeautifulSoup(html, "html.parser")
+    token = soup.find("input", {"name": "__RequestVerificationToken"})
+    return token["value"] if token else None
+
+
+def create_session():
+    """Go through the full DFA appointment flow to get a valid session."""
+    session = requests.Session()
+    session.headers.update(BROWSER_HEADERS)
+
+    # Step 1: GET homepage
+    res = session.get(f"{BASE_URL}/appointment", timeout=15)
+    print(f"Step 1 (homepage): {res.status_code}")
+
+    # Step 2: POST terms agreement
+    token = get_csrf_token(session, res.text)
+    if not token:
+        print("ERROR: Could not find CSRF token on homepage")
+        return None
+
+    res = session.post(
+        f"{BASE_URL}/appointment/terms",
+        data={
+            "__RequestVerificationToken": token,
+            "agree": "on",
+            "groupType": "Individual",
+        },
+        headers={"Referer": f"{BASE_URL}/appointment"},
+        timeout=15
     )
-    request = google.auth.transport.requests.Request()
-    credentials.refresh(request)
-    return credentials.token
+    print(f"Step 2 (terms): {res.status_code} -> {res.url}")
+
+    return session
 
 
-def fetch_available_dates(site_id):
-    today = date.today().strftime("%Y-%m-%d")
-    payload = {
-        "fromDate": today,
-        "toDate": "2026-12-31",
-        "siteId": site_id,
-        "requestedSlots": 1,
-    }
+def fetch_available_dates(session, site_id, site_name):
+    """For each site, go through site selection then fetch availability."""
     try:
-        res = requests.post(DFA_API_URL, data=payload, headers=DFA_HEADERS, timeout=10)
+        # Step 3: GET site selection page (should already be there after terms)
+        res = session.get(
+            f"{BASE_URL}/appointment/individual/schedule",
+            timeout=15
+        )
+        token = get_csrf_token(session, res.text)
+
+        # Step 4: POST site selection + second checkbox
+        res = session.post(
+            f"{BASE_URL}/appointment/individual/schedule",
+            data={
+                "__RequestVerificationToken": token,
+                "CurrentStep": "site",
+                "PreviousStep": "",
+                "SiteID": site_id,
+                "co-notif-checkbox": "on",
+            },
+            headers={"Referer": f"{BASE_URL}/appointment/individual/schedule"},
+            timeout=15
+        )
+        print(f"  Site selection for {site_name}: {res.status_code}")
+
+        # Step 5: POST to availability API
+        today = date.today().strftime("%Y-%m-%d")
+        res = session.post(
+            f"{BASE_URL}/appointment/timeslot/available",
+            data={
+                "fromDate": today,
+                "toDate": "2026-12-31",
+                "siteId": site_id,
+                "requestedSlots": 1,
+            },
+            headers={"Referer": f"{BASE_URL}/appointment/individual/schedule"},
+            timeout=15
+        )
+        print(f"  Availability for {site_name}: {res.status_code}, response: {res.text[:100]}")
+
+        if not res.text.strip() or res.text.strip() in ["null", "[]"]:
+            return []
+
         slots = res.json()
         return [
             datetime.utcfromtimestamp(s["AppointmentDate"] / 1000).strftime("%Y-%m-%d")
-            for s in slots if s["IsAvailable"]
+            for s in slots if s.get("IsAvailable")
         ]
+
     except Exception as e:
-        print(f"  Error fetching site {site_id}: {e}")
+        print(f"  Error for {site_name}: {e}")
         return []
 
 
@@ -109,13 +168,13 @@ def get_current_slots():
     return {row["slot_date"] for row in res.json()}
 
 
-def insert_slot(date_str, site_name):
+def insert_slot(date_str):
     requests.post(
         f"{SUPABASE_URL}/rest/v1/slots",
         headers=SUPABASE_HEADERS,
         json={"agency_id": "dfa", "slot_date": date_str}
     )
-    print(f"  Inserted: {date_str} ({site_name})")
+    print(f"  Inserted: {date_str}")
 
 
 def delete_slot(date_str):
@@ -134,6 +193,16 @@ def get_subscribed_tokens():
     return [row["fcm_token"] for row in res.json()]
 
 
+def get_fcm_access_token():
+    credentials = service_account.Credentials.from_service_account_info(
+        FCM_SERVICE_ACCOUNT,
+        scopes=["https://www.googleapis.com/auth/firebase.messaging"]
+    )
+    request = google.auth.transport.requests.Request()
+    credentials.refresh(request)
+    return credentials.token
+
+
 def send_push_notification(tokens, new_dates, access_token):
     if not tokens:
         print("No subscribers, skipping notification.")
@@ -144,7 +213,6 @@ def send_push_notification(tokens, new_dates, access_token):
         "Authorization": f"Bearer {access_token}",
         "Content-Type": "application/json"
     }
-
     for token in tokens:
         payload = {
             "message": {
@@ -157,18 +225,23 @@ def send_push_notification(tokens, new_dates, access_token):
             }
         }
         res = requests.post(url, headers=headers, json=payload)
-        print(f"  FCM response for {token[:20]}...: {res.status_code}")
+        print(f"  FCM {token[:20]}...: {res.status_code}")
 
 
 def run():
     print(f"Scraper started at {datetime.now()}")
 
+    session = create_session()
+    if not session:
+        print("ERROR: Could not create session, aborting.")
+        return
+
     scraped_dates = set()
     for site in DFA_SITES:
-        dates = fetch_available_dates(site["id"])
+        dates = fetch_available_dates(session, site["id"], site["name"])
         if dates:
-            print(f"{site['name']}: {dates}")
-        scraped_dates.update(dates)
+            print(f"  {site['name']}: {dates}")
+            scraped_dates.update(dates)
 
     print(f"Total available dates found: {len(scraped_dates)}")
 
@@ -177,7 +250,7 @@ def run():
     removed_dates = current_dates - scraped_dates
 
     for d in new_dates:
-        insert_slot(d, "DFA")
+        insert_slot(d)
     for d in removed_dates:
         delete_slot(d)
 
