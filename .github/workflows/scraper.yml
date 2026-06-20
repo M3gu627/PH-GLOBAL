@@ -17,9 +17,7 @@ jobs:
           python-version: '3.11'
 
       - name: Install dependencies
-        run: |
-          pip install requests beautifulsoup4 google-auth playwright
-          playwright install chromium
+        run: pip install requests google-auth
 
       - name: Run scraper
         env:

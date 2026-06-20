@@ -1,29 +1,73 @@
 import os
 import json
 import requests
-from datetime import datetime
-from playwright.sync_api import sync_playwright
+from datetime import datetime, date
 import google.auth
 import google.auth.transport.requests
 from google.oauth2 import service_account
 
-DFA_LOCATIONS = [
-    {"slug": "dfa-ncr-central", "label": "DFA NCR Central"},
-    {"slug": "dfa-ncr-north",   "label": "DFA NCR North"},
-    {"slug": "dfa-ncr-south",   "label": "DFA NCR South"},
-    {"slug": "dfa-ncr-west",    "label": "DFA NCR West"},
+# All official DFA sites with their IDs
+DFA_SITES = [
+    {"id": "10",  "name": "Angeles (SM City Clark, Angeles City)"},
+    {"id": "486", "name": "Antipolo (SM Center, Antipolo City, Rizal)"},
+    {"id": "693", "name": "Antique (CityMall Antique)"},
+    {"id": "11",  "name": "Bacolod (Robinsons Bacolod)"},
+    {"id": "12",  "name": "Baguio (SM City Baguio)"},
+    {"id": "703", "name": "Balanga (The Bunker Building, Capitol Compound)"},
+    {"id": "14",  "name": "Butuan (Robinsons Butuan)"},
+    {"id": "15",  "name": "Cagayan De Oro (BPO Tower SM Downtown Premier)"},
+    {"id": "16",  "name": "Calasiao (Robinsons Calasiao, Pangasinan)"},
+    {"id": "702", "name": "Candon (Candon City Arena)"},
+    {"id": "17",  "name": "Cebu (ROBINSONS GALLERIA, CEBU CITY)"},
+    {"id": "487", "name": "Clarin (Town Center, Clarin, Misamis OCC)"},
+    {"id": "4",   "name": "DFA Manila (Aseana)"},
+    {"id": "5",   "name": "DFA NCR Central (Robinsons Galleria Ortigas, Quezon City)"},
+    {"id": "6",   "name": "DFA NCR East (SM Megamall, Mandaluyong City)"},
+    {"id": "423", "name": "DFA NCR North (Robinsons Novaliches, Quezon City)"},
+    {"id": "7",   "name": "DFA NCR Northeast (Ali Mall Cubao, Quezon City)"},
+    {"id": "704", "name": "DFA NCR South (Festival Mall, Muntinlupa City)"},
+    {"id": "9",   "name": "DFA NCR West (SM City, Manila)"},
+    {"id": "488", "name": "Dasmarinas (SM City Dasmarinas)"},
+    {"id": "19",  "name": "Davao (SM City Davao)"},
+    {"id": "20",  "name": "Dumaguete (Robinsons Dumaguete)"},
+    {"id": "21",  "name": "General Santos (Robinsons Gen. Santos City)"},
+    {"id": "488", "name": "Ilocos Norte (Robinsons Place, San Nicolas)"},
+    {"id": "22",  "name": "Iloilo (Robinsons Iloilo)"},
+    {"id": "690", "name": "Kidapawan (Kidapawan City)"},
+    {"id": "23",  "name": "La Union (CSI Mall San Fernando, La Union)"},
+    {"id": "24",  "name": "Legazpi (Pacific Mall Legazpi)"},
+    {"id": "13",  "name": "Lipa (Robinsons Lipa)"},
+    {"id": "25",  "name": "Lucena (Pacific Mall, Lucena)"},
+    {"id": "489", "name": "Malolos (CTTCH., Xentro Mall, Malolos City)"},
+    {"id": "705", "name": "Olongapo (SM City Olongapo Central)"},
+    {"id": "694", "name": "Pagadian (C3 Mall, Pagadian City)"},
+    {"id": "27",  "name": "Pampanga (Robinsons StarMills San Fernando)"},
+    {"id": "553", "name": "Paniqui, Tarlac (WalterMart)"},
+    {"id": "26",  "name": "Puerto Princesa (Robinsons Palawan)"},
+    {"id": "425", "name": "Santiago, Isabela (Robinsons Place Santiago)"},
+    {"id": "28",  "name": "Tacloban (Robinsons N. Abucay, Tac. City)"},
+    {"id": "709", "name": "Tagbilaran (Alturas Mall, Tagbilaran City)"},
+    {"id": "491", "name": "Tagum (Robinsons Place of Tagum)"},
+    {"id": "29",  "name": "Tuguegarao (Reg. Govt Center, Tuguegarao City)"},
+    {"id": "30",  "name": "Zamboanga (Go-Velayo Bldg. Vet. Ave. Zambo)"},
 ]
 
-BASE_URL = "https://dfacalendar.netpinoy.com/philippines"
 SUPABASE_URL = os.environ["SUPABASE_URL"]
 SUPABASE_KEY = os.environ["SUPABASE_KEY"]
 FCM_SERVICE_ACCOUNT = json.loads(os.environ["FCM_SERVICE_ACCOUNT"])
 PROJECT_ID = "ph-global"
 
-HEADERS = {
+SUPABASE_HEADERS = {
     "apikey": SUPABASE_KEY,
     "Authorization": f"Bearer {SUPABASE_KEY}",
     "Content-Type": "application/json"
+}
+
+DFA_API_URL = "https://passport.gov.ph/appointment/timeslot/available"
+DFA_HEADERS = {
+    "Content-Type": "application/x-www-form-urlencoded",
+    "Referer": "https://passport.gov.ph/appointment/individual/schedule",
+    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
 }
 
 
@@ -37,74 +81,55 @@ def get_fcm_access_token():
     return credentials.token
 
 
-def fetch_all_dates_playwright():
-    dates = {loc["slug"]: [] for loc in DFA_LOCATIONS}
-
-    with sync_playwright() as p:
-        browser = p.chromium.launch()
-        page = browser.new_page()
-
-        for loc in DFA_LOCATIONS:
-            slug = loc["slug"]
-            url = f"{BASE_URL}/{slug}"
-            print(f"Fetching {url}...")
-
-            try:
-                page.goto(url, wait_until="domcontentloaded", timeout=60000)
-                page.wait_for_timeout(5000)
-
-                content = page.inner_text("body")
-                print(f"  Snippet: {content[:300]}")
-
-                for line in content.split("\n"):
-                    line = line.strip()
-                    if "Earliest Date:" in line:
-                        date_str = line.replace("Earliest Date:", "").strip()
-                        try:
-                            date = datetime.strptime(date_str, "%b %d, %Y").date()
-                            dates[slug].append(str(date))
-                            print(f"  Found date: {date}")
-                        except ValueError:
-                            pass
-
-            except Exception as e:
-                print(f"  Error fetching {slug}: {e}")
-                continue
-
-        browser.close()
-
-    return dates
+def fetch_available_dates(site_id):
+    today = date.today().strftime("%Y-%m-%d")
+    payload = {
+        "fromDate": today,
+        "toDate": "2026-12-31",
+        "siteId": site_id,
+        "requestedSlots": 1,
+    }
+    try:
+        res = requests.post(DFA_API_URL, data=payload, headers=DFA_HEADERS, timeout=10)
+        slots = res.json()
+        return [
+            datetime.utcfromtimestamp(s["AppointmentDate"] / 1000).strftime("%Y-%m-%d")
+            for s in slots if s["IsAvailable"]
+        ]
+    except Exception as e:
+        print(f"  Error fetching site {site_id}: {e}")
+        return []
 
 
 def get_current_slots():
     res = requests.get(
         f"{SUPABASE_URL}/rest/v1/slots?agency_id=eq.dfa&select=slot_date",
-        headers=HEADERS
+        headers=SUPABASE_HEADERS
     )
     return {row["slot_date"] for row in res.json()}
 
 
-def insert_slot(date):
+def insert_slot(date_str, site_name):
     requests.post(
         f"{SUPABASE_URL}/rest/v1/slots",
-        headers=HEADERS,
-        json={"agency_id": "dfa", "slot_date": date}
+        headers=SUPABASE_HEADERS,
+        json={"agency_id": "dfa", "slot_date": date_str}
     )
-    print(f"Inserted slot: {date}")
+    print(f"  Inserted: {date_str} ({site_name})")
 
 
-def delete_slot(date):
+def delete_slot(date_str):
     requests.delete(
-        f"{SUPABASE_URL}/rest/v1/slots?agency_id=eq.dfa&slot_date=eq.{date}",
-        headers=HEADERS
+        f"{SUPABASE_URL}/rest/v1/slots?agency_id=eq.dfa&slot_date=eq.{date_str}",
+        headers=SUPABASE_HEADERS
     )
-    print(f"Deleted slot: {date}")
+    print(f"  Deleted: {date_str}")
 
 
 def get_subscribed_tokens():
     res = requests.get(
         f"{SUPABASE_URL}/rest/v1/subscriptions?agency_id=eq.dfa&select=fcm_token",
-        headers=HEADERS
+        headers=SUPABASE_HEADERS
     )
     return [row["fcm_token"] for row in res.json()]
 
@@ -132,28 +157,29 @@ def send_push_notification(tokens, new_dates, access_token):
             }
         }
         res = requests.post(url, headers=headers, json=payload)
-        print(f"FCM response for {token[:20]}...: {res.status_code}")
+        print(f"  FCM response for {token[:20]}...: {res.status_code}")
 
 
 def run():
     print(f"Scraper started at {datetime.now()}")
 
-    all_dates = fetch_all_dates_playwright()
-
     scraped_dates = set()
-    for loc in DFA_LOCATIONS:
-        dates = all_dates[loc["slug"]]
-        print(f"{loc['label']}: {dates}")
+    for site in DFA_SITES:
+        dates = fetch_available_dates(site["id"])
+        if dates:
+            print(f"{site['name']}: {dates}")
         scraped_dates.update(dates)
+
+    print(f"Total available dates found: {len(scraped_dates)}")
 
     current_dates = get_current_slots()
     new_dates = scraped_dates - current_dates
     removed_dates = current_dates - scraped_dates
 
-    for date in new_dates:
-        insert_slot(date)
-    for date in removed_dates:
-        delete_slot(date)
+    for d in new_dates:
+        insert_slot(d, "DFA")
+    for d in removed_dates:
+        delete_slot(d)
 
     if new_dates:
         access_token = get_fcm_access_token()
