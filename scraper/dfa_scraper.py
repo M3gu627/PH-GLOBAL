@@ -7,48 +7,9 @@ import google.auth
 import google.auth.transport.requests
 from google.oauth2 import service_account
 
+# Testing with one site first
 DFA_SITES = [
-    {"id": "10",  "name": "Angeles (SM City Clark, Angeles City)"},
-    {"id": "486", "name": "Antipolo (SM Center, Antipolo City, Rizal)"},
-    {"id": "693", "name": "Antique (CityMall Antique)"},
-    {"id": "11",  "name": "Bacolod (Robinsons Bacolod)"},
-    {"id": "12",  "name": "Baguio (SM City Baguio)"},
-    {"id": "703", "name": "Balanga (The Bunker Building, Capitol Compound)"},
-    {"id": "14",  "name": "Butuan (Robinsons Butuan)"},
-    {"id": "15",  "name": "Cagayan De Oro (BPO Tower SM Downtown Premier)"},
-    {"id": "16",  "name": "Calasiao (Robinsons Calasiao, Pangasinan)"},
-    {"id": "702", "name": "Candon (Candon City Arena)"},
-    {"id": "17",  "name": "Cebu (Robinsons Galleria, Cebu City)"},
-    {"id": "487", "name": "Clarin (Town Center, Clarin, Misamis OCC)"},
-    {"id": "4",   "name": "DFA Manila (Aseana)"},
-    {"id": "5",   "name": "DFA NCR Central (Robinsons Galleria Ortigas, Quezon City)"},
-    {"id": "6",   "name": "DFA NCR East (SM Megamall, Mandaluyong City)"},
-    {"id": "423", "name": "DFA NCR North (Robinsons Novaliches, Quezon City)"},
-    {"id": "7",   "name": "DFA NCR Northeast (Ali Mall Cubao, Quezon City)"},
-    {"id": "704", "name": "DFA NCR South (Festival Mall, Muntinlupa City)"},
-    {"id": "9",   "name": "DFA NCR West (SM City, Manila)"},
-    {"id": "488", "name": "Dasmarinas (SM City Dasmarinas)"},
-    {"id": "19",  "name": "Davao (SM City Davao)"},
-    {"id": "20",  "name": "Dumaguete (Robinsons Dumaguete)"},
-    {"id": "21",  "name": "General Santos (Robinsons Gen. Santos City)"},
-    {"id": "22",  "name": "Iloilo (Robinsons Iloilo)"},
-    {"id": "690", "name": "Kidapawan (Kidapawan City)"},
-    {"id": "23",  "name": "La Union (CSI Mall San Fernando)"},
-    {"id": "24",  "name": "Legazpi (Pacific Mall Legazpi)"},
-    {"id": "13",  "name": "Lipa (Robinsons Lipa)"},
-    {"id": "25",  "name": "Lucena (Pacific Mall, Lucena)"},
-    {"id": "489", "name": "Malolos (CTTCH., Xentro Mall, Malolos City)"},
-    {"id": "705", "name": "Olongapo (SM City Olongapo Central)"},
-    {"id": "694", "name": "Pagadian (C3 Mall, Pagadian City)"},
-    {"id": "27",  "name": "Pampanga (Robinsons StarMills San Fernando)"},
-    {"id": "553", "name": "Paniqui, Tarlac (WalterMart)"},
-    {"id": "26",  "name": "Puerto Princesa (Robinsons Palawan)"},
-    {"id": "425", "name": "Santiago, Isabela (Robinsons Place Santiago)"},
-    {"id": "28",  "name": "Tacloban (Robinsons N. Abucay, Tac. City)"},
-    {"id": "709", "name": "Tagbilaran (Alturas Mall, Tagbilaran City)"},
-    {"id": "491", "name": "Tagum (Robinsons Place of Tagum)"},
-    {"id": "29",  "name": "Tuguegarao (Reg. Govt Center, Tuguegarao City)"},
-    {"id": "30",  "name": "Zamboanga (Go-Velayo Bldg. Vet. Ave. Zambo)"},
+    {"id": "5", "name": "DFA NCR Central (Robinsons Galleria Ortigas, Quezon City)"},
 ]
 
 BASE_URL = "https://passport.gov.ph"
@@ -70,25 +31,24 @@ BROWSER_HEADERS = {
 }
 
 
-def get_csrf_token(session, html):
+def get_csrf_token(html):
     soup = BeautifulSoup(html, "html.parser")
     token = soup.find("input", {"name": "__RequestVerificationToken"})
     return token["value"] if token else None
 
 
 def create_session():
-    """Go through the full DFA appointment flow to get a valid session."""
     session = requests.Session()
     session.headers.update(BROWSER_HEADERS)
 
     # Step 1: GET homepage
     res = session.get(f"{BASE_URL}/appointment", timeout=15)
-    print(f"Step 1 (homepage): {res.status_code}")
+    print(f"Step 1 (homepage): {res.status_code} -> {res.url}")
 
     # Step 2: POST terms agreement
-    token = get_csrf_token(session, res.text)
+    token = get_csrf_token(res.text)
     if not token:
-        print("ERROR: Could not find CSRF token on homepage")
+        print("ERROR: No CSRF token on homepage")
         return None
 
     res = session.post(
@@ -107,16 +67,20 @@ def create_session():
 
 
 def fetch_available_dates(session, site_id, site_name):
-    """For each site, go through site selection then fetch availability."""
     try:
-        # Step 3: GET site selection page (should already be there after terms)
+        # Re-fetch schedule page fresh for each site
         res = session.get(
             f"{BASE_URL}/appointment/individual/schedule",
             timeout=15
         )
-        token = get_csrf_token(session, res.text)
+        print(f"  Schedule page: {res.status_code} -> {res.url}")
 
-        # Step 4: POST site selection + second checkbox
+        token = get_csrf_token(res.text)
+        if not token:
+            print(f"  No CSRF token for {site_name}")
+            return []
+
+        # POST site selection
         res = session.post(
             f"{BASE_URL}/appointment/individual/schedule",
             data={
@@ -127,11 +91,13 @@ def fetch_available_dates(session, site_id, site_name):
                 "co-notif-checkbox": "on",
             },
             headers={"Referer": f"{BASE_URL}/appointment/individual/schedule"},
-            timeout=15
+            timeout=15,
+            allow_redirects=True
         )
-        print(f"  Site selection for {site_name}: {res.status_code}")
+        print(f"  After site POST: {res.status_code} -> {res.url}")
+        print(f"  Page snippet: {res.text[200:500]}")
 
-        # Step 5: POST to availability API
+        # POST to availability API
         today = date.today().strftime("%Y-%m-%d")
         res = session.post(
             f"{BASE_URL}/appointment/timeslot/available",
@@ -144,7 +110,7 @@ def fetch_available_dates(session, site_id, site_name):
             headers={"Referer": f"{BASE_URL}/appointment/individual/schedule"},
             timeout=15
         )
-        print(f"  Availability for {site_name}: {res.status_code}, response: {res.text[:100]}")
+        print(f"  Availability: {res.status_code} -> {res.text[:300]}")
 
         if not res.text.strip() or res.text.strip() in ["null", "[]"]:
             return []
