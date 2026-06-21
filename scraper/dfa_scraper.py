@@ -66,9 +66,10 @@ SUPABASE_KEY = os.environ["SUPABASE_KEY"]
 FCM_SERVICE_ACCOUNT = json.loads(os.environ["FCM_SERVICE_ACCOUNT"])
 PROJECT_ID = "ph-global"
 
-# Max concurrent pages inside this batch job.
-# asyncio.Semaphore keeps it safe without threads.
-MAX_CONCURRENT = 6
+# Sites are processed sequentially — one at a time, fully reliable.
+# The 4-job GitHub Actions matrix provides the parallelism instead.
+MAX_RETRIES = 3          # Attempts per site before giving up
+RETRY_BASE_DELAY = 5     # Seconds: 5s, 10s, 20s (exponential backoff)
 
 SUPABASE_HEADERS = {
     "apikey": SUPABASE_KEY,
@@ -86,7 +87,7 @@ def get_sites_for_this_batch(sites):
 
 
 # ---------------------------------------------------------------------------
-# Supabase helpers (sync — called outside event loop)
+# Supabase helpers
 # ---------------------------------------------------------------------------
 
 def get_active_site_ids():
@@ -131,7 +132,7 @@ def get_subscribed_tokens(site_id):
 
 
 # ---------------------------------------------------------------------------
-# FCM helpers (sync)
+# FCM helpers
 # ---------------------------------------------------------------------------
 
 def get_fcm_access_token():
@@ -169,109 +170,187 @@ def send_push_notification(tokens, new_dates, access_token, site_name):
 
 
 # ---------------------------------------------------------------------------
-# Async Playwright — scrape one site per coroutine
+# Core scrape logic for a single site (one attempt)
 # ---------------------------------------------------------------------------
 
-async def scrape_site(context, site, semaphore):
+async def scrape_site_once(browser, site) -> list[str]:
     """
-    Each site gets its own page. The semaphore limits how many run at once.
-    Uses async_playwright — no threads, no greenlet issues.
+    Navigate the full DFA booking flow for one site and return available dates.
+    Uses element-based waiting instead of fixed timeouts wherever possible.
+    Raises on any failure so the retry wrapper can catch it.
     """
     site_id = site["id"]
     site_name = site["name"]
-    available_dates = []
+    api_response = []
 
-    async with semaphore:
-        page = await context.new_page()
+    # Fresh context per attempt — clears cookies/session state between retries
+    context = await browser.new_context(
+        user_agent=(
+            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+            "AppleWebKit/537.36 (KHTML, like Gecko) "
+            "Chrome/120.0.0.0 Safari/537.36"
+        ),
+        viewport={"width": 1280, "height": 800},
+        locale="en-US",
+    )
+    page = await context.new_page()
+
+    # Intercept the timeslot API response
+    slot_received = asyncio.Event()
+
+    async def handle_response(response):
+        if "timeslot/available" in response.url:
+            try:
+                data = await response.json()
+                api_response.extend(data)
+                print(f"    [{site_id}] Intercepted {len(data)} slot records")
+                slot_received.set()
+            except Exception as e:
+                print(f"    [{site_id}] Could not parse timeslot response: {e}")
+
+    page.on("response", handle_response)
+
+    try:
+        # --- Step 1: Load appointment page ---
+        print(f"    [{site_id}] Loading appointment page...")
+        await page.goto(
+            f"{BASE_URL}/appointment",
+            wait_until="domcontentloaded",
+            timeout=60000,
+        )
+
+        # Wait for the agree checkbox to appear before interacting
+        await page.wait_for_selector("#agree", state="visible", timeout=20000)
+        await page.check("#agree")
+
+        # --- Step 2: Click Individual and wait for site selection page ---
+        print(f"    [{site_id}] Navigating to site selection...")
+        await page.click("button[value='Individual']")
+
+        # Wait for the region dropdown to be visible — confirms page loaded
+        await page.wait_for_selector(
+            "select[name='SiteRegionID']", state="visible", timeout=45000
+        )
+
+        # --- Step 3: Select Region → Country → Site ---
+        await page.select_option("select[name='SiteRegionID']", "1")
+
+        # Wait for country dropdown to populate after region selection
+        await page.wait_for_selector(
+            "select[name='SiteCountryID'] option:not([value=''])",
+            timeout=15000,
+        )
+        await page.select_option("select[name='SiteCountryID']", "1")
+
+        # Wait for site dropdown to populate after country selection
+        await page.wait_for_selector(
+            "select[name='SiteID'] option:not([value=''])",
+            timeout=15000,
+        )
+        await page.select_option("select[name='SiteID']", site_id)
+
+        # Small pause for any JS to react to the site selection
+        await page.wait_for_timeout(800)
+
+        # --- Step 4: Check notification checkboxes (best-effort) ---
+        for cb in [
+            "cl-notif-checkbox",
+            "pubpow-notif-checkbox",
+            "ofw-notif-checkbox",
+            "renewal-notif-checkbox",
+            "co-notif-checkbox",
+        ]:
+            try:
+                await page.check(f"#{cb}", timeout=2000)
+            except Exception:
+                pass
+
+        # --- Step 5: Click Next and wait for schedule page ---
+        print(f"    [{site_id}] Submitting site selection...")
+        next_btn = page.locator("input[value='Next'], button:has-text('Next')")
+        await next_btn.wait_for(state="visible", timeout=10000)
+        await next_btn.click()
+
+        # Wait for the schedule page to load (URL change confirms navigation)
+        await page.wait_for_url("**/individual/schedule", timeout=45000)
+
+        # --- Step 6: Wait for the timeslot API response ---
+        # Either the event fires (API responded) or we wait up to 15s max
+        print(f"    [{site_id}] Waiting for timeslot API response...")
         try:
-            api_response = []
+            await asyncio.wait_for(slot_received.wait(), timeout=15.0)
+        except asyncio.TimeoutError:
+            # API never responded — site may have no slots, that's fine
+            print(f"    [{site_id}] No timeslot API response received (likely no slots)")
 
-            async def handle_response(response):
-                if "timeslot/available" in response.url:
-                    try:
-                        data = await response.json()
-                        api_response.extend(data)
-                        print(f"  [{site_id}] Intercepted {len(data)} slot records")
-                    except Exception as e:
-                        print(f"  [{site_id}] Could not parse timeslot response: {e}")
+        # Parse available dates
+        available_dates = [
+            datetime.utcfromtimestamp(s["AppointmentDate"] / 1000).strftime("%Y-%m-%d")
+            for s in api_response
+            if s.get("IsAvailable")
+        ]
+        print(f"    [{site_id}] Available dates: {available_dates or 'none'}")
+        return available_dates
 
-            page.on("response", handle_response)
+    finally:
+        await page.close()
+        await context.close()
 
-            print(f"\n[{site_id}] Starting: {site_name}")
-            await page.goto(f"{BASE_URL}/appointment", wait_until="domcontentloaded", timeout=30000)
-            await page.wait_for_timeout(1000)
 
-            await page.check("#agree")
-            await page.click("button[value='Individual']")
-            await page.wait_for_url("**/individual/site", timeout=15000)
+# ---------------------------------------------------------------------------
+# Retry wrapper with exponential backoff
+# ---------------------------------------------------------------------------
 
-            await page.select_option("select[name='SiteRegionID']", "1")
-            await page.wait_for_timeout(1000)
+async def scrape_site_with_retry(browser, site) -> tuple[str, list[str]]:
+    site_id = site["id"]
+    site_name = site["name"]
 
-            await page.select_option("select[name='SiteCountryID']", "1")
-            await page.wait_for_timeout(1000)
-
-            await page.select_option("select[name='SiteID']", site_id)
-            await page.wait_for_timeout(1000)
-
-            for cb in [
-                "cl-notif-checkbox",
-                "pubpow-notif-checkbox",
-                "ofw-notif-checkbox",
-                "renewal-notif-checkbox",
-                "co-notif-checkbox",
-            ]:
-                try:
-                    await page.check(f"#{cb}")
-                except Exception:
-                    pass
-
-            await page.click("input[value='Next'], button:has-text('Next')")
-            await page.wait_for_url("**/individual/schedule", timeout=15000)
-            await page.wait_for_timeout(5000)
-
-            available_dates = [
-                datetime.utcfromtimestamp(s["AppointmentDate"] / 1000).strftime("%Y-%m-%d")
-                for s in api_response
-                if s.get("IsAvailable")
-            ]
-            print(f"  [{site_id}] Available dates: {available_dates or 'none'}")
+    for attempt in range(1, MAX_RETRIES + 1):
+        try:
+            print(f"\n  [{site_id}] Attempt {attempt}/{MAX_RETRIES}: {site_name}")
+            dates = await scrape_site_once(browser, site)
+            return site_id, dates
 
         except Exception as e:
-            print(f"  [{site_id}] Error for {site_name}: {e}")
-        finally:
-            await page.close()
+            print(f"  [{site_id}] Attempt {attempt} failed: {type(e).__name__}: {str(e)[:120]}")
+            if attempt < MAX_RETRIES:
+                delay = RETRY_BASE_DELAY * (2 ** (attempt - 1))  # 5s, 10s, 20s
+                print(f"  [{site_id}] Retrying in {delay}s...")
+                await asyncio.sleep(delay)
+            else:
+                print(f"  [{site_id}] All {MAX_RETRIES} attempts failed. Skipping.")
 
-    return site_id, available_dates
+    return site_id, []
 
 
 # ---------------------------------------------------------------------------
-# Async fetch — runs all sites concurrently via asyncio.gather
+# Sequential fetch — one site at a time, fully stable
+# (GitHub Actions matrix provides parallelism across jobs)
 # ---------------------------------------------------------------------------
 
-async def fetch_all_dates_async(sites_to_scrape):
+async def fetch_all_dates_async(sites_to_scrape) -> dict[str, list[str]]:
     results = {}
 
     async with async_playwright() as p:
-        browser = await p.chromium.launch(args=["--no-sandbox"])
-        context = await browser.new_context(
-            user_agent=(
-                "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
-                "AppleWebKit/537.36 (KHTML, like Gecko) "
-                "Chrome/120.0.0.0 Safari/537.36"
-            )
+        browser = await p.chromium.launch(
+            headless=True,
+            args=[
+                "--no-sandbox",
+                "--disable-setuid-sandbox",
+                "--disable-dev-shm-usage",   # Prevents shared memory crashes in CI
+                "--disable-gpu",
+                "--disable-extensions",
+                "--disable-background-networking",
+                "--no-first-run",
+                "--no-default-browser-check",
+            ],
         )
 
-        semaphore = asyncio.Semaphore(MAX_CONCURRENT)
-        tasks = [scrape_site(context, site, semaphore) for site in sites_to_scrape]
-        site_results = await asyncio.gather(*tasks, return_exceptions=True)
-
-        for item in site_results:
-            if isinstance(item, BaseException):
-                print(f"  Task failed with exception: {item}")
-            elif isinstance(item, tuple):
-                site_id, dates = item
-                results[site_id] = dates
+        for site in sites_to_scrape:
+            site_id, dates = await scrape_site_with_retry(browser, site)
+            results[site_id] = dates
+            # Small breathing room between sites to be polite to the DFA server
+            await asyncio.sleep(2)
 
         await browser.close()
 
@@ -302,10 +381,10 @@ def run():
         print("  Nothing to scrape for this batch. Exiting.")
         return
 
-    # 3. Scrape concurrently via asyncio
+    # 3. Scrape sequentially (retries handled inside)
     all_results = asyncio.run(fetch_all_dates_async(sites_to_scrape))
 
-    # 4. Diff against Supabase
+    # 4. Diff against Supabase — only for sites this batch handled
     current_slots = get_current_slots()
     scraped_slots = {
         (site_id, d)
@@ -314,7 +393,9 @@ def run():
     }
 
     batch_site_ids = {s["id"] for s in sites_to_scrape}
-    current_slots_for_batch = {(sid, d) for sid, d in current_slots if sid in batch_site_ids}
+    current_slots_for_batch = {
+        (sid, d) for sid, d in current_slots if sid in batch_site_ids
+    }
 
     new_slots = scraped_slots - current_slots_for_batch
     removed_slots = current_slots_for_batch - scraped_slots
@@ -326,10 +407,10 @@ def run():
     for site_id, d in removed_slots:
         delete_slot(d, site_id)
 
-    # 5. FCM push for new slots
+    # 5. FCM push for each site with new slots
     if new_slots:
         access_token = get_fcm_access_token()
-        notified_sites = set()
+        notified_sites: set[str] = set()
         for site_id, _ in new_slots:
             if site_id in notified_sites:
                 continue
