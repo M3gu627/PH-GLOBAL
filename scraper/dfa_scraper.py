@@ -67,6 +67,7 @@ FCM_SERVICE_ACCOUNT = json.loads(os.environ["FCM_SERVICE_ACCOUNT"])
 PROJECT_ID = "ph-global"
 
 # Max concurrent pages inside this batch job.
+# asyncio.Semaphore keeps it safe without threads.
 MAX_CONCURRENT = 6
 
 SUPABASE_HEADERS = {
@@ -174,6 +175,7 @@ def send_push_notification(tokens, new_dates, access_token, site_name):
 async def scrape_site(context, site, semaphore):
     """
     Each site gets its own page. The semaphore limits how many run at once.
+    Uses async_playwright — no threads, no greenlet issues.
     """
     site_id = site["id"]
     site_name = site["name"]
@@ -265,9 +267,9 @@ async def fetch_all_dates_async(sites_to_scrape):
         site_results = await asyncio.gather(*tasks, return_exceptions=True)
 
         for item in site_results:
-            if isinstance(item, Exception):
+            if isinstance(item, BaseException):
                 print(f"  Task failed with exception: {item}")
-            else:
+            elif isinstance(item, tuple):
                 site_id, dates = item
                 results[site_id] = dates
 
