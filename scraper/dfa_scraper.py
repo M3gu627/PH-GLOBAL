@@ -1,11 +1,17 @@
 import os
 import json
+import threading
 import requests
-from datetime import datetime, date
+from datetime import datetime
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from playwright.sync_api import sync_playwright
 import google.auth
 import google.auth.transport.requests
 from google.oauth2 import service_account
+
+# ---------------------------------------------------------------------------
+# Site list
+# ---------------------------------------------------------------------------
 
 DFA_SITES = [
     {"id": "10",  "name": "Angeles (SM City Clark, Angeles City)"},
@@ -51,111 +57,63 @@ DFA_SITES = [
     {"id": "30",  "name": "Zamboanga (Go-Velayo Bldg. Vet. Ave. Zambo)"},
 ]
 
+# ---------------------------------------------------------------------------
+# Config
+# ---------------------------------------------------------------------------
+
 BASE_URL = "https://passport.gov.ph"
 SUPABASE_URL = os.environ["SUPABASE_URL"]
 SUPABASE_KEY = os.environ["SUPABASE_KEY"]
 FCM_SERVICE_ACCOUNT = json.loads(os.environ["FCM_SERVICE_ACCOUNT"])
 PROJECT_ID = "ph-global"
 
+# How many browser pages to run in parallel within this job.
+# Keep at 6 — high enough to be fast, low enough to avoid DFA rate-limiting.
+MAX_WORKERS = 6
+
 SUPABASE_HEADERS = {
     "apikey": SUPABASE_KEY,
     "Authorization": f"Bearer {SUPABASE_KEY}",
-    "Content-Type": "application/json"
+    "Content-Type": "application/json",
 }
 
+# ---------------------------------------------------------------------------
+# Batch slicing (set by GitHub Actions matrix via env vars)
+# BATCH_INDEX: which slice this job handles (0-based)
+# BATCH_TOTAL: total number of parallel jobs
+# ---------------------------------------------------------------------------
 
-def get_fcm_access_token():
-    credentials = service_account.Credentials.from_service_account_info(
-        FCM_SERVICE_ACCOUNT,
-        scopes=["https://www.googleapis.com/auth/firebase.messaging"]
+BATCH_INDEX = int(os.environ.get("BATCH_INDEX", "0"))
+BATCH_TOTAL = int(os.environ.get("BATCH_TOTAL", "1"))
+
+
+def get_sites_for_this_batch(sites):
+    """Return the slice of sites assigned to this batch job."""
+    return sites[BATCH_INDEX::BATCH_TOTAL]
+
+
+# ---------------------------------------------------------------------------
+# Supabase helpers
+# ---------------------------------------------------------------------------
+
+def get_active_site_ids():
+    """
+    Only return site IDs that have at least one subscriber.
+    This avoids scraping sites nobody cares about yet.
+    Falls back to all sites if Supabase returns nothing (e.g. zero users so far).
+    """
+    res = requests.get(
+        f"{SUPABASE_URL}/rest/v1/subscriptions?agency_id=eq.dfa&select=site_id",
+        headers=SUPABASE_HEADERS,
     )
-    request = google.auth.transport.requests.Request()
-    credentials.refresh(request)
-    return credentials.token
-
-
-def fetch_all_dates():
-    results = {}
-
-    with sync_playwright() as p:
-        browser = p.chromium.launch(args=["--no-sandbox"])
-        context = browser.new_context(
-            user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
-        )
-
-        for site in DFA_SITES:
-            site_id = site["id"]
-            site_name = site["name"]
-            available_dates = []
-
-            try:
-                page = context.new_page()
-                api_response = []
-
-                def handle_response(response, sid=site_id, sname=site_name):
-                    if "timeslot/available" in response.url:
-                        try:
-                            data = response.json()
-                            api_response.extend(data)
-                            print(f"  Intercepted {len(data)} slots for {sname}")
-                        except Exception as e:
-                            print(f"  Could not parse timeslot response: {e}")
-
-                page.on("response", handle_response)
-
-                print(f"\nProcessing {site_name}...")
-                page.goto(f"{BASE_URL}/appointment", wait_until="domcontentloaded", timeout=30000)
-                page.wait_for_timeout(1000)
-
-                page.check("#agree")
-                page.click("button[value='Individual']")
-                page.wait_for_url("**/individual/site", timeout=15000)
-                print(f"  Reached site selection page")
-
-                page.select_option("select[name='SiteRegionID']", "1")
-                page.wait_for_timeout(1000)
-
-                page.select_option("select[name='SiteCountryID']", "1")
-                page.wait_for_timeout(1000)
-
-                page.select_option("select[name='SiteID']", site_id)
-                page.wait_for_timeout(1000)
-
-                for cb in ["cl-notif-checkbox", "pubpow-notif-checkbox",
-                           "ofw-notif-checkbox", "renewal-notif-checkbox", "co-notif-checkbox"]:
-                    try:
-                        page.check(f"#{cb}")
-                    except Exception:
-                        pass
-
-                page.click("input[value='Next'], button:has-text('Next')")
-                page.wait_for_url("**/individual/schedule", timeout=15000)
-                print(f"  Reached schedule page")
-
-                page.wait_for_timeout(5000)
-
-                available_dates = [
-                    datetime.utcfromtimestamp(s["AppointmentDate"] / 1000).strftime("%Y-%m-%d")
-                    for s in api_response if s.get("IsAvailable")
-                ]
-                print(f"  Available dates: {available_dates}")
-
-            except Exception as e:
-                print(f"  Error for {site_name}: {e}")
-            finally:
-                page.close()
-
-            results[site_id] = available_dates
-
-        browser.close()
-
-    return results
+    ids = {row["site_id"] for row in res.json()}
+    return ids  # empty set means "scrape all" — handled by caller
 
 
 def get_current_slots():
     res = requests.get(
         f"{SUPABASE_URL}/rest/v1/slots?agency_id=eq.dfa&select=slot_date,site_id",
-        headers=SUPABASE_HEADERS
+        headers=SUPABASE_HEADERS,
     )
     return {(row["site_id"], row["slot_date"]) for row in res.json()}
 
@@ -164,7 +122,7 @@ def insert_slot(date_str, site_id):
     requests.post(
         f"{SUPABASE_URL}/rest/v1/slots",
         headers=SUPABASE_HEADERS,
-        json={"agency_id": "dfa", "slot_date": date_str, "site_id": site_id}
+        json={"agency_id": "dfa", "slot_date": date_str, "site_id": site_id},
     )
     print(f"  Inserted: {date_str} (site {site_id})")
 
@@ -172,7 +130,7 @@ def insert_slot(date_str, site_id):
 def delete_slot(date_str, site_id):
     requests.delete(
         f"{SUPABASE_URL}/rest/v1/slots?agency_id=eq.dfa&slot_date=eq.{date_str}&site_id=eq.{site_id}",
-        headers=SUPABASE_HEADERS
+        headers=SUPABASE_HEADERS,
     )
     print(f"  Deleted: {date_str} (site {site_id})")
 
@@ -180,20 +138,34 @@ def delete_slot(date_str, site_id):
 def get_subscribed_tokens(site_id):
     res = requests.get(
         f"{SUPABASE_URL}/rest/v1/subscriptions?agency_id=eq.dfa&site_id=eq.{site_id}&select=fcm_token",
-        headers=SUPABASE_HEADERS
+        headers=SUPABASE_HEADERS,
     )
     return [row["fcm_token"] for row in res.json()]
 
 
+# ---------------------------------------------------------------------------
+# FCM helpers
+# ---------------------------------------------------------------------------
+
+def get_fcm_access_token():
+    credentials = service_account.Credentials.from_service_account_info(
+        FCM_SERVICE_ACCOUNT,
+        scopes=["https://www.googleapis.com/auth/firebase.messaging"],
+    )
+    request = google.auth.transport.requests.Request()
+    credentials.refresh(request)
+    return credentials.token
+
+
 def send_push_notification(tokens, new_dates, access_token, site_name):
     if not tokens:
-        print("No subscribers, skipping notification.")
+        print("  No subscribers — skipping notification.")
         return
 
     url = f"https://fcm.googleapis.com/v1/projects/{PROJECT_ID}/messages:send"
     headers = {
         "Authorization": f"Bearer {access_token}",
-        "Content-Type": "application/json"
+        "Content-Type": "application/json",
     }
     for token in tokens:
         payload = {
@@ -201,50 +173,205 @@ def send_push_notification(tokens, new_dates, access_token, site_name):
                 "token": token,
                 "notification": {
                     "title": "DFA Slot Available!",
-                    "body": f"{site_name}: {', '.join(new_dates)}"
+                    "body": f"{site_name}: {', '.join(new_dates)}",
                 },
-                "data": {"agency_id": "dfa"}
+                "data": {"agency_id": "dfa"},
             }
         }
         res = requests.post(url, headers=headers, json=payload)
         print(f"  FCM {token[:20]}...: {res.status_code}")
 
 
+# ---------------------------------------------------------------------------
+# Playwright — scrape one site (runs inside a thread)
+# ---------------------------------------------------------------------------
+
+# new_page() is not thread-safe; guard it with a lock.
+_page_lock = threading.Lock()
+
+
+def scrape_site(context, site):
+    """
+    Open a browser page, navigate the full DFA booking flow for `site`,
+    intercept the timeslot/available XHR, and return available dates.
+    Returns (site_id, [date_str, ...])
+    """
+    site_id = site["id"]
+    site_name = site["name"]
+    available_dates = []
+
+    with _page_lock:
+        page = context.new_page()
+
+    try:
+        api_response = []
+        response_lock = threading.Lock()
+
+        def handle_response(response):
+            if "timeslot/available" in response.url:
+                try:
+                    data = response.json()
+                    with response_lock:
+                        api_response.extend(data)
+                    print(f"  [{site_id}] Intercepted {len(data)} slot records")
+                except Exception as e:
+                    print(f"  [{site_id}] Could not parse timeslot response: {e}")
+
+        page.on("response", handle_response)
+
+        print(f"\n[{site_id}] Starting: {site_name}")
+        page.goto(f"{BASE_URL}/appointment", wait_until="domcontentloaded", timeout=30000)
+        page.wait_for_timeout(1000)
+
+        page.check("#agree")
+        page.click("button[value='Individual']")
+        page.wait_for_url("**/individual/site", timeout=15000)
+
+        page.select_option("select[name='SiteRegionID']", "1")
+        page.wait_for_timeout(1000)
+
+        page.select_option("select[name='SiteCountryID']", "1")
+        page.wait_for_timeout(1000)
+
+        page.select_option("select[name='SiteID']", site_id)
+        page.wait_for_timeout(1000)
+
+        for cb in [
+            "cl-notif-checkbox",
+            "pubpow-notif-checkbox",
+            "ofw-notif-checkbox",
+            "renewal-notif-checkbox",
+            "co-notif-checkbox",
+        ]:
+            try:
+                page.check(f"#{cb}")
+            except Exception:
+                pass
+
+        page.click("input[value='Next'], button:has-text('Next')")
+        page.wait_for_url("**/individual/schedule", timeout=15000)
+        page.wait_for_timeout(5000)
+
+        available_dates = [
+            datetime.utcfromtimestamp(s["AppointmentDate"] / 1000).strftime("%Y-%m-%d")
+            for s in api_response
+            if s.get("IsAvailable")
+        ]
+        print(f"  [{site_id}] Available dates: {available_dates or 'none'}")
+
+    except Exception as e:
+        print(f"  [{site_id}] Error for {site_name}: {e}")
+    finally:
+        page.close()
+
+    return site_id, available_dates
+
+
+# ---------------------------------------------------------------------------
+# Parallel fetch using ThreadPoolExecutor
+# ---------------------------------------------------------------------------
+
+def fetch_all_dates(sites_to_scrape):
+    results = {}
+
+    with sync_playwright() as p:
+        browser = p.chromium.launch(args=["--no-sandbox"])
+        context = browser.new_context(
+            user_agent=(
+                "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+                "AppleWebKit/537.36 (KHTML, like Gecko) "
+                "Chrome/120.0.0.0 Safari/537.36"
+            )
+        )
+
+        with ThreadPoolExecutor(max_workers=MAX_WORKERS) as executor:
+            futures = {
+                executor.submit(scrape_site, context, site): site
+                for site in sites_to_scrape
+            }
+            for future in as_completed(futures):
+                try:
+                    site_id, dates = future.result()
+                    results[site_id] = dates
+                except Exception as e:
+                    site = futures[future]
+                    print(f"  Unhandled error for {site['name']}: {e}")
+                    results[site["id"]] = []
+
+        browser.close()
+
+    return results
+
+
+# ---------------------------------------------------------------------------
+# Main
+# ---------------------------------------------------------------------------
+
 def run():
-    print(f"Scraper started at {datetime.now()}")
+    print(f"Scraper started at {datetime.now()} | batch {BATCH_INDEX + 1}/{BATCH_TOTAL}")
 
-    all_results = fetch_all_dates()
+    # 1. Determine which sites this batch job is responsible for
+    batch_sites = get_sites_for_this_batch(DFA_SITES)
+    print(f"  Batch covers {len(batch_sites)} sites: {[s['id'] for s in batch_sites]}")
 
+    # 2. Filter to only sites that have at least one subscriber
+    active_ids = get_active_site_ids()
+    if active_ids:
+        sites_to_scrape = [s for s in batch_sites if s["id"] in active_ids]
+        print(f"  After subscriber filter: {len(sites_to_scrape)} sites to scrape")
+    else:
+        # No subscribers yet — scrape the full batch so slots stay up to date
+        sites_to_scrape = batch_sites
+        print("  No subscribers found — scraping full batch anyway")
+
+    if not sites_to_scrape:
+        print("  Nothing to scrape for this batch. Exiting.")
+        return
+
+    # 3. Scrape in parallel
+    all_results = fetch_all_dates(sites_to_scrape)
+
+    # 4. Diff against current Supabase state
     current_slots = get_current_slots()
     scraped_slots = set()
-
     for site_id, dates in all_results.items():
         for d in dates:
             scraped_slots.add((site_id, d))
 
-    new_slots = scraped_slots - current_slots
-    removed_slots = current_slots - scraped_slots
+    # Only diff slots belonging to sites this batch handled
+    batch_site_ids = {s["id"] for s in sites_to_scrape}
+    current_slots_for_batch = {(sid, d) for sid, d in current_slots if sid in batch_site_ids}
+
+    new_slots = scraped_slots - current_slots_for_batch
+    removed_slots = current_slots_for_batch - scraped_slots
+
+    print(f"\n  New slots: {len(new_slots)} | Removed slots: {len(removed_slots)}")
 
     for site_id, d in new_slots:
         insert_slot(d, site_id)
     for site_id, d in removed_slots:
         delete_slot(d, site_id)
 
-    notified_sites = set()
-    for site_id, d in new_slots:
-        if site_id not in notified_sites:
+    # 5. Send FCM push for each site that has new slots
+    if new_slots:
+        access_token = get_fcm_access_token()
+        notified_sites = set()
+
+        for site_id, _ in new_slots:
+            if site_id in notified_sites:
+                continue
             tokens = get_subscribed_tokens(site_id)
             if tokens:
-                access_token = get_fcm_access_token()
-                new_dates_for_site = [d for s, d in new_slots if s == site_id]
-                site_name = next((s["name"] for s in DFA_SITES if s["id"] == site_id), site_id)
+                new_dates_for_site = [d for sid, d in new_slots if sid == site_id]
+                site_name = next(
+                    (s["name"] for s in DFA_SITES if s["id"] == site_id), site_id
+                )
                 send_push_notification(tokens, new_dates_for_site, access_token, site_name)
             notified_sites.add(site_id)
+    else:
+        print("  No new slots — no notifications sent.")
 
-    if not new_slots:
-        print("No new slots found.")
-
-    print("Scraper finished.")
+    print(f"\nScraper finished at {datetime.now()}")
 
 
 if __name__ == "__main__":
