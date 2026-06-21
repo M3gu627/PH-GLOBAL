@@ -8,10 +8,10 @@ on:
 jobs:
   scrape:
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 10
     strategy:
       matrix:
-        batch_index: [0, 1, 2, 3]
+        batch_index: [0, 1, 2, 3, 4, 5, 6, 7]
 
     steps:
       - name: Checkout
@@ -31,5 +31,5 @@ jobs:
           SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}
           FCM_SERVICE_ACCOUNT: ${{ secrets.FCM_SERVICE_ACCOUNT }}
           BATCH_INDEX: ${{ matrix.batch_index }}
-          BATCH_TOTAL: 4
+          BATCH_TOTAL: 8
         run: python scraper/bir_scraper.py

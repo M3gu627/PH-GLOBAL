@@ -170,15 +170,15 @@ SUPABASE_HEADERS = {
 # Microsoft Bookings API helpers
 # ---------------------------------------------------------------------------
 
-MAX_RETRIES = 3
-RETRY_DELAY = 5   # seconds, multiplied by attempt number
-REQUEST_DELAY = 2 # seconds between offices
+MAX_RETRIES = 2
+RETRY_DELAY = 2   # seconds, multiplied by attempt number
+REQUEST_DELAY = 1 # seconds between offices
 
 
 def _post_with_retry(url: str, payload: dict, label: str) -> dict:
     for attempt in range(1, MAX_RETRIES + 1):
         try:
-            res = requests.post(url, json=payload, timeout=20)
+            res = requests.post(url, json=payload, timeout=10)
             return res.json()
         except Exception as e:
             print(f"    {label} timeout (attempt {attempt}/{MAX_RETRIES}): {type(e).__name__}")
