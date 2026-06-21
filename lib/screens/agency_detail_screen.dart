@@ -150,9 +150,16 @@ class _AgencyDetailScreenState extends State<AgencyDetailScreen> {
                       ),
                     ),
                     const SizedBox(height: 12),
+
+                    // ── Location dropdown ──────────────────────────────────
+                    // isExpanded: true prevents text overflow on the selected
+                    // item. selectedItemBuilder renders a clipped single-line
+                    // version in the closed button; the full name is still
+                    // visible in the open menu list.
                     if (_isDfa && agency.sites.isNotEmpty)
                       DropdownButtonFormField<DfaSite>(
                         value: _selectedSite,
+                        isExpanded: true,
                         dropdownColor: Colors.black,
                         decoration: InputDecoration(
                           labelText: 'Select Location',
@@ -163,15 +170,35 @@ class _AgencyDetailScreenState extends State<AgencyDetailScreen> {
                             borderRadius: BorderRadius.circular(12),
                             borderSide: const BorderSide(color: Colors.grey),
                           ),
+                          contentPadding: const EdgeInsets.symmetric(
+                              horizontal: 12, vertical: 14),
                         ),
+                        // Closed state: single line, ellipsis if too long
+                        selectedItemBuilder: (context) =>
+                            agency.sites.map((site) {
+                          return Text(
+                            site.name,
+                            overflow: TextOverflow.ellipsis,
+                            maxLines: 1,
+                            style: const TextStyle(color: Colors.white),
+                          );
+                        }).toList(),
+                        // Open menu: each item also clips, keeps menu tidy
                         items: agency.sites.map((site) {
                           return DropdownMenuItem(
                             value: site,
-                            child: Text(site.name, overflow: TextOverflow.ellipsis),
+                            child: Text(
+                              site.name,
+                              overflow: TextOverflow.ellipsis,
+                              maxLines: 1,
+                              style: const TextStyle(color: Colors.white),
+                            ),
                           );
                         }).toList(),
-                        onChanged: (site) => setState(() => _selectedSite = site),
+                        onChanged: (site) =>
+                            setState(() => _selectedSite = site),
                       ),
+
                     const SizedBox(height: 16),
                     MonthCalendar(highlightedDates: _displayDates),
                     const SizedBox(height: 16),

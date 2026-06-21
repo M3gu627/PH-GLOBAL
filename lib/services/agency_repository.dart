@@ -50,44 +50,67 @@ class AgencyRepository {
   static final _client = Supabase.instance.client;
 
   static Future<List<Agency>> fetchAgencies() async {
-    final agenciesData = await _client.from('agencies').select();
-    final slotsData = await _client.from('slots').select();
+    // Fetch agencies and slots in parallel for speed
+    final results = await Future.wait([
+      _client.from('agencies').select(),
+      // Order by date so display is always chronological.
+      // limit(2000) future-proofs against Supabase's default 1000-row cap.
+      _client
+          .from('slots')
+          .select('agency_id, site_id, slot_date')
+          .order('slot_date', ascending: true)
+          .limit(2000),
+    ]);
+
+    final agenciesData = results[0] as List<dynamic>;
+    final slotsData = results[1] as List<dynamic>;
 
     debugPrint('Fetched ${agenciesData.length} agencies');
     debugPrint('Fetched ${slotsData.length} slots');
 
-    return agenciesData.map((row) {
-      final agencySlots = slotsData
-          .where((s) => s['agency_id'] == row['id'])
-          .toList();
+    // Pre-group slots by agency_id — avoids scanning full list per agency
+    final slotsByAgency = <String, List<Map<String, dynamic>>>{};
+    for (final s in slotsData) {
+      final agencyId = s['agency_id'] as String;
+      slotsByAgency.putIfAbsent(agencyId, () => []).add(s as Map<String, dynamic>);
+    }
 
+    return agenciesData.map((row) {
+      final agencyId = row['id'] as String;
+      final agencySlots = slotsByAgency[agencyId] ?? [];
+
+      // Dates already ordered ascending from the query
       final allDates = agencySlots
           .map((s) => DateTime.parse(s['slot_date'] as String))
           .toList();
 
       List<DfaSite> sites = [];
-      if (row['id'] == 'dfa') {
-        final siteIds = agencySlots
-            .map((s) => s['site_id'] as String?)
-            .whereType<String>()
-            .toSet();
+      if (agencyId == 'dfa') {
+        // Group slots by site_id
+        final slotsBySite = <String, List<DateTime>>{};
+        for (final s in agencySlots) {
+          final siteId = s['site_id'] as String?;
+          if (siteId == null) continue;
+          slotsBySite
+              .putIfAbsent(siteId, () => [])
+              .add(DateTime.parse(s['slot_date'] as String));
+        }
 
-        sites = siteIds.map((siteId) {
-          final siteDates = agencySlots
-              .where((s) => s['site_id'] == siteId)
-              .map((s) => DateTime.parse(s['slot_date'] as String))
-              .toList();
+        // Build a DfaSite for EVERY known location — even those with no slots
+        // yet — so the dropdown always shows all 41 locations, not just the
+        // ones that happen to have data today.
+        sites = _dfaSiteNames.entries.map((entry) {
           return DfaSite(
-            id: siteId,
-            name: _dfaSiteNames[siteId] ?? 'DFA Site $siteId',
-            availableDates: siteDates,
+            id: entry.key,
+            name: entry.value,
+            availableDates: slotsBySite[entry.key] ?? [],
           );
         }).toList()
           ..sort((a, b) => a.name.compareTo(b.name));
       }
 
       return Agency(
-        id: row['id'],
+        id: agencyId,
         name: row['name'],
         description: row['description'] ?? '',
         websiteUrl: row['website_url'],
