@@ -237,22 +237,8 @@ async def scrape_site_once(browser, site) -> list[str]:
         await page.select_option("select[name='SiteRegionID']", "1")
         await page.wait_for_timeout(3000)  # Wait for country AJAX to complete
 
-        # Debug: log what options are available in the country dropdown
-        country_options = await page.eval_on_selector_all(
-            "select[name='SiteCountryID'] option",
-            "els => els.map(e => ({value: e.value, text: e.textContent.trim()}))"
-        )
-        print(f"    [{site_id}] Country options available: {country_options[:5]}")
-
         await page.select_option("select[name='SiteCountryID']", "1")
         await page.wait_for_timeout(3000)  # Wait for site AJAX to complete
-
-        # Debug: log how many site options loaded
-        site_options = await page.eval_on_selector_all(
-            "select[name='SiteID'] option",
-            "els => els.map(e => e.value).filter(v => v !== '')"
-        )
-        print(f"    [{site_id}] Site options available: {len(site_options)} sites")
 
         await page.select_option("select[name='SiteID']", site_id)
         await page.wait_for_timeout(1000)
@@ -305,7 +291,12 @@ async def scrape_site_once(browser, site) -> list[str]:
 # Retry wrapper with exponential backoff
 # ---------------------------------------------------------------------------
 
-async def scrape_site_with_retry(browser, site) -> tuple[str, list[str]]:
+async def scrape_site_with_retry(browser, site) -> tuple[str, list[str] | None]:
+    """
+    Returns (site_id, dates) where:
+      - dates is a list (possibly empty) on success — empty means no slots available
+      - dates is None on complete failure after all retries
+    """
     site_id = site["id"]
     site_name = site["name"]
 
@@ -313,18 +304,18 @@ async def scrape_site_with_retry(browser, site) -> tuple[str, list[str]]:
         try:
             print(f"\n  [{site_id}] Attempt {attempt}/{MAX_RETRIES}: {site_name}")
             dates = await scrape_site_once(browser, site)
-            return site_id, dates
+            return site_id, dates  # Success — even if dates is []
 
         except Exception as e:
             print(f"  [{site_id}] Attempt {attempt} failed: {type(e).__name__}: {str(e)[:120]}")
             if attempt < MAX_RETRIES:
-                delay = RETRY_BASE_DELAY * (2 ** (attempt - 1))  # 5s, 10s, 20s
+                delay = RETRY_BASE_DELAY * (2 ** (attempt - 1))
                 print(f"  [{site_id}] Retrying in {delay}s...")
                 await asyncio.sleep(delay)
             else:
                 print(f"  [{site_id}] All {MAX_RETRIES} attempts failed. Skipping.")
 
-    return site_id, []
+    return site_id, None  # None = scrape failed, not "no slots"
 
 
 # ---------------------------------------------------------------------------
@@ -366,11 +357,19 @@ async def fetch_all_dates_async(sites_to_scrape) -> dict:
             finally:
                 await browser.close()
 
-            results[site_id] = dates
+            # dates=None means scrape failed; dates=[] means scraped OK, no slots
+            results[site_id] = dates if dates is not None else []
 
             site_elapsed = (datetime.now() - site_start).seconds
-            status = "✓ SUCCESS" if dates else "✗ FAILED"
-            slot_count = len(dates) if dates else 0
+            if dates is None:
+                status = "✗ FAILED"
+                slot_count = 0
+            elif len(dates) == 0:
+                status = "○ NO SLOTS"
+                slot_count = 0
+            else:
+                status = "✓ SUCCESS"
+                slot_count = len(dates)
 
             site_log.append({
                 "id": site_id,
@@ -397,11 +396,12 @@ async def fetch_all_dates_async(sites_to_scrape) -> dict:
             f"  {log['id']:<6} {log['status']:<12} {log['slots']:<8} "
             f"{str(log['elapsed'])+'s':<8} {log['name']}"
         )
-    succeeded = sum(1 for l in site_log if "SUCCESS" in l["status"])
-    failed = sum(1 for l in site_log if "FAILED" in l["status"])
+    succeeded = sum(1 for l in site_log if l["status"] == "✓ SUCCESS")
+    no_slots  = sum(1 for l in site_log if l["status"] == "○ NO SLOTS")
+    failed    = sum(1 for l in site_log if l["status"] == "✗ FAILED")
     total_slots = sum(l["slots"] for l in site_log)
     print(f"  {'-'*54}")
-    print(f"  Succeeded: {succeeded} | Failed: {failed} | Total slots found: {total_slots}")
+    print(f"  ✓ Slots found: {succeeded} | ○ No slots: {no_slots} | ✗ Failed: {failed} | Total slots: {total_slots}")
     print(f"{'='*60}\n")
 
     return results
