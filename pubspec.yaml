@@ -1,5 +1,5 @@
-name: startup_app
-description: "A new Flutter project."
+name: ph_global
+description: "PH Global Appointment Notifier"
 publish_to: 'none'
 
 version: 1.0.0+1
@@ -24,11 +24,5 @@ dev_dependencies:
 
 flutter:
   uses-material-design: true
-
-  # Assets
   assets:
     - assets/applogo.png
-
-  # You can add more assets later like this:
-  #   - assets/images/
-  #   - assets/icons/

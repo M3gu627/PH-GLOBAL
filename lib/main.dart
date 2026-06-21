@@ -3,15 +3,13 @@ import 'package:firebase_core/firebase_core.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'firebase_options.dart';
 import 'services/fcm_service.dart';
+import 'services/notification_service.dart';
 import 'screens/agency_list_screen.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
   await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
-
-  // Init FCM listeners only — do NOT request permission here.
-  // Permission is requested after splash so the user sees the app first.
   await FcmService.init();
 
   await Supabase.initialize(
@@ -28,7 +26,7 @@ class MyApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'PH Global',
+      title: 'PH Global Notifier',
       debugShowCheckedModeBanner: false,
       theme: ThemeData.dark(),
       navigatorKey: FcmService.navigatorKey,
@@ -48,46 +46,44 @@ class _SplashScreenState extends State<SplashScreen> {
   @override
   void initState() {
     super.initState();
+    _init();
+  }
 
-    Future.delayed(const Duration(seconds: 4), () async {
-      if (!mounted) return;
+  Future<void> _init() async {
+    await Future.delayed(const Duration(seconds: 4));
+    if (!mounted) return;
 
-      // Request notification permission after splash — user sees the app
-      // context first, making the permission prompt feel natural.
-      await FcmService.requestPermission();
+    // Navigate first so the permission dialog appears over the main screen
+    Navigator.pushReplacement(
+      context,
+      MaterialPageRoute(builder: (context) => const AgencyListScreen()),
+    );
 
-      if (!mounted) return;
-      Navigator.pushReplacement(
-        context,
-        MaterialPageRoute(builder: (context) => const AgencyListScreen()),
-      );
-    });
+    await FcmService.requestPermission();
+    await NotificationService.instance.loadFromSupabase();
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color.fromARGB(255, 247, 242, 242),
+      backgroundColor: const Color(0xFF121212),
       body: Center(
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Image.asset(
-              'assets/applogo.png',
-              width: 180,
-              height: 180,
-            ),
+            Image.asset('assets/applogo.png', width: 180, height: 180),
             const SizedBox(height: 20),
             const Text(
-              "PH GLOBAL",
+              'PH GLOBAL',
               style: TextStyle(
                 fontSize: 28,
                 fontWeight: FontWeight.bold,
                 letterSpacing: 2,
+                color: Colors.white,
               ),
             ),
             const Text(
-              "APPOINTMENT NOTIFIER",
+              'APPOINTMENT NOTIFIER',
               style: TextStyle(
                 fontSize: 14,
                 letterSpacing: 3,
@@ -105,7 +101,7 @@ class _SplashScreenState extends State<SplashScreen> {
             ),
             const SizedBox(height: 20),
             const Text(
-              "LOADING...",
+              'LOADING...',
               style: TextStyle(
                 fontSize: 18,
                 fontWeight: FontWeight.w500,

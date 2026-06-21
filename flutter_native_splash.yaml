@@ -1,16 +1,8 @@
 flutter_native_splash:
-  color: "#121212"                    # Background color (dark theme example)
-  # color_dark: "#121212"             # Optional: dark mode color
-
-  image: assets/applogo.png              # Your logo image (recommended)
-
-  # Or use just a background color without image:
-  # image: null
-
+  color: "#121212"
+  image: assets/applogo.png
   android_12:
     image: assets/applogo.png
     icon_background_color: "#121212"
-
-  # iOS settings
   ios: true
   android: true

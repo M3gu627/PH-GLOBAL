@@ -27,3 +27,9 @@ plugins {
 }
 
 include(":app")
+
+gradle.afterProject {
+    if (project.plugins.hasPlugin("com.android.library")) {
+        project.extensions.getByType<com.android.build.gradle.LibraryExtension>().compileSdk = 36
+    }
+}
