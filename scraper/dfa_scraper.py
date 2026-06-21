@@ -68,8 +68,8 @@ PROJECT_ID = "ph-global"
 
 # Sites are processed sequentially — one at a time, fully reliable.
 # The 4-job GitHub Actions matrix provides the parallelism instead.
-MAX_RETRIES = 3          # Attempts per site before giving up
-RETRY_BASE_DELAY = 5     # Seconds: 5s, 10s, 20s (exponential backoff)
+MAX_RETRIES = 2          # Attempts per site before giving up
+RETRY_BASE_DELAY = 3     # Seconds: 3s, 6s (exponential backoff)
 
 SUPABASE_HEADERS = {
     "apikey": SUPABASE_KEY,
@@ -278,7 +278,7 @@ async def scrape_site_once(browser, site) -> list[str]:
         # Either the event fires (API responded) or we wait up to 15s max
         print(f"    [{site_id}] Waiting for timeslot API response...")
         try:
-            await asyncio.wait_for(slot_received.wait(), timeout=15.0)
+            await asyncio.wait_for(slot_received.wait(), timeout=8.0)
         except asyncio.TimeoutError:
             # API never responded — site may have no slots, that's fine
             print(f"    [{site_id}] No timeslot API response received (likely no slots)")
@@ -350,7 +350,7 @@ async def fetch_all_dates_async(sites_to_scrape) -> dict[str, list[str]]:
             site_id, dates = await scrape_site_with_retry(browser, site)
             results[site_id] = dates
             # Small breathing room between sites to be polite to the DFA server
-            await asyncio.sleep(2)
+            await asyncio.sleep(1)
 
         await browser.close()
 

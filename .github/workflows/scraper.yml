@@ -6,13 +6,56 @@ on:
   workflow_dispatch:
 
 jobs:
-  scrape:
+  # ------------------------------------------------------------------
+  # Installs Playwright + Chromium once and caches for all batch jobs
+  # ------------------------------------------------------------------
+  setup:
     runs-on: ubuntu-latest
-    timeout-minutes: 10        # Was 20 — each batch only handles ~11 sites
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.11'
+
+      - name: Cache pip packages
+        uses: actions/cache@v3
+        id: pip-cache
+        with:
+          path: ~/.cache/pip
+          key: pip-${{ runner.os }}-v1
+
+      - name: Cache Playwright Chromium
+        uses: actions/cache@v3
+        id: playwright-cache
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-chromium-${{ runner.os }}-v1
+
+      - name: Install pip packages
+        if: steps.pip-cache.outputs.cache-hit != 'true'
+        run: pip install requests google-auth playwright
+
+      - name: Install Chromium browser
+        if: steps.playwright-cache.outputs.cache-hit != 'true'
+        run: |
+          pip install playwright
+          playwright install chromium
+          playwright install-deps chromium
+
+  # ------------------------------------------------------------------
+  # 4 parallel batch jobs — each restores from cache, no fresh installs
+  # ------------------------------------------------------------------
+  scrape:
+    needs: setup
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
     strategy:
-      fail-fast: false          # If one batch fails, others keep running
+      fail-fast: false
       matrix:
-        batch_index: [0, 1, 2, 3]   # 4 parallel jobs
+        batch_index: [0, 1, 2, 3, 4, 5]
 
     steps:
       - uses: actions/checkout@v3
@@ -22,11 +65,22 @@ jobs:
         with:
           python-version: '3.11'
 
-      - name: Install dependencies
+      - name: Restore pip cache
+        uses: actions/cache@v3
+        with:
+          path: ~/.cache/pip
+          key: pip-${{ runner.os }}-v1
+
+      - name: Restore Playwright Chromium cache
+        uses: actions/cache@v3
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-chromium-${{ runner.os }}-v1
+
+      - name: Install packages (from cache — should be instant)
         run: |
           pip install requests google-auth playwright
           playwright install chromium
-          playwright install-deps chromium
 
       - name: Run scraper (batch ${{ matrix.batch_index }})
         env:
@@ -34,5 +88,5 @@ jobs:
           SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}
           FCM_SERVICE_ACCOUNT: ${{ secrets.FCM_SERVICE_ACCOUNT }}
           BATCH_INDEX: ${{ matrix.batch_index }}
-          BATCH_TOTAL: "4"
+          BATCH_TOTAL: "6"
         run: python scraper/dfa_scraper.py
