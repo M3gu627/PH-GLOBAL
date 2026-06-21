@@ -9,7 +9,7 @@ class NotificationService {
 
   final notifiedAgencyIds = ValueNotifier<Set<String>>({});
 
-  bool isNotified(String agencyId) => notifiedAgencyIds.value.contains(agencyId);
+  bool isNotified(String key) => notifiedAgencyIds.value.contains(key);
 
   /// Load subscriptions from Supabase on app start
   Future<void> loadFromSupabase() async {
@@ -18,23 +18,31 @@ class NotificationService {
 
     final rows = await Supabase.instance.client
         .from('subscriptions')
-        .select('agency_id')
+        .select('agency_id, site_id')
         .eq('fcm_token', token);
 
-    final ids = (rows as List).map((r) => r['agency_id'] as String).toSet();
+    final ids = (rows as List).map((r) {
+      final agencyId = r['agency_id'] as String;
+      final siteId = r['site_id'] as String?;
+      return siteId != null ? '${agencyId}_$siteId' : agencyId;
+    }).toSet();
+
     notifiedAgencyIds.value = ids;
     debugPrint('Loaded ${ids.length} subscriptions from Supabase');
   }
 
   Future<void> toggle(String agencyId, {String? siteId}) async {
+    final key = siteId != null ? '${agencyId}_$siteId' : agencyId;
     final updated = Set<String>.from(notifiedAgencyIds.value);
-    if (updated.contains(agencyId)) {
-      updated.remove(agencyId);
+
+    if (updated.contains(key)) {
+      updated.remove(key);
       await FcmService.unsubscribeFromAgency(agencyId, siteId: siteId);
     } else {
-      updated.add(agencyId);
+      updated.add(key);
       await FcmService.subscribeToAgency(agencyId, siteId: siteId);
     }
+
     notifiedAgencyIds.value = updated;
   }
 }

@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../models/agency.dart';
 import '../services/notification_service.dart';
-import '../services/fcm_service.dart';
 import '../widgets/month_calendar.dart';
 
 class AgencyDetailScreen extends StatefulWidget {
@@ -46,13 +45,11 @@ class _AgencyDetailScreenState extends State<AgencyDetailScreen> {
 
   Future<void> _toggleNotify() async {
     final wasNotified = NotificationService.instance.isNotified(_notifyKey);
-    NotificationService.instance.toggle(_notifyKey);
 
-    if (!wasNotified) {
-      await FcmService.subscribeToAgency(widget.agency.id, siteId: _selectedSite?.id);
-    } else {
-      await FcmService.unsubscribeFromAgency(widget.agency.id, siteId: _selectedSite?.id);
-    }
+    await NotificationService.instance.toggle(
+      widget.agency.id,
+      siteId: _selectedSite?.id,
+    );
 
     if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
@@ -151,11 +148,6 @@ class _AgencyDetailScreenState extends State<AgencyDetailScreen> {
                     ),
                     const SizedBox(height: 12),
 
-                    // ── Location dropdown ──────────────────────────────────
-                    // isExpanded: true prevents text overflow on the selected
-                    // item. selectedItemBuilder renders a clipped single-line
-                    // version in the closed button; the full name is still
-                    // visible in the open menu list.
                     if (_isDfa && agency.sites.isNotEmpty)
                       DropdownButtonFormField<DfaSite>(
                         value: _selectedSite,
@@ -173,7 +165,6 @@ class _AgencyDetailScreenState extends State<AgencyDetailScreen> {
                           contentPadding: const EdgeInsets.symmetric(
                               horizontal: 12, vertical: 14),
                         ),
-                        // Closed state: single line, ellipsis if too long
                         selectedItemBuilder: (context) =>
                             agency.sites.map((site) {
                           return Text(
@@ -183,7 +174,6 @@ class _AgencyDetailScreenState extends State<AgencyDetailScreen> {
                             style: const TextStyle(color: Colors.white),
                           );
                         }).toList(),
-                        // Open menu: each item also clips, keeps menu tidy
                         items: agency.sites.map((site) {
                           return DropdownMenuItem(
                             value: site,

@@ -74,7 +74,7 @@ class _SplashScreenState extends State<SplashScreen> {
             Image.asset('assets/applogo.png', width: 180, height: 180),
             const SizedBox(height: 20),
             const Text(
-              'PH GLOBAL',
+              'PH',
               style: TextStyle(
                 fontSize: 28,
                 fontWeight: FontWeight.bold,
@@ -83,7 +83,7 @@ class _SplashScreenState extends State<SplashScreen> {
               ),
             ),
             const Text(
-              'APPOINTMENT NOTIFIER',
+              'NOTIFY',
               style: TextStyle(
                 fontSize: 14,
                 letterSpacing: 3,
@@ -105,7 +105,7 @@ class _SplashScreenState extends State<SplashScreen> {
               style: TextStyle(
                 fontSize: 18,
                 fontWeight: FontWeight.w500,
-                color: Colors.white70,
+                color: Color.fromARGB(255, 255, 255, 255),
                 letterSpacing: 4,
               ),
             ),
