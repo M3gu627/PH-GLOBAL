@@ -16,28 +16,49 @@ class AgencyDetailScreen extends StatefulWidget {
 
 class _AgencyDetailScreenState extends State<AgencyDetailScreen> {
   static const _months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+  DfaSite? _selectedSite;
+
+  @override
+  void initState() {
+    super.initState();
+    if (widget.agency.sites.isNotEmpty) {
+      _selectedSite = widget.agency.sites.first;
+    }
+  }
+
+  List<DateTime> get _displayDates =>
+      _selectedSite?.availableDates ?? widget.agency.availableDates;
+
+  bool get _isDfa => widget.agency.id == 'dfa';
+
+  String get _notifyKey => _isDfa && _selectedSite != null
+      ? '${widget.agency.id}_${_selectedSite!.id}'
+      : widget.agency.id;
 
   Future<void> _openWebsite() async {
     final uri = Uri.parse(widget.agency.websiteUrl);
     if (!await launchUrl(uri, mode: LaunchMode.externalApplication)) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Could not open website')));
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Could not open website')));
     }
   }
 
   Future<void> _toggleNotify() async {
-    final wasNotified = NotificationService.instance.isNotified(widget.agency.id);
-    NotificationService.instance.toggle(widget.agency.id);
+    final wasNotified = NotificationService.instance.isNotified(_notifyKey);
+    NotificationService.instance.toggle(_notifyKey);
 
     if (!wasNotified) {
-      await FcmService.subscribeToAgency(widget.agency.id);
+      await FcmService.subscribeToAgency(widget.agency.id, siteId: _selectedSite?.id);
     } else {
-      await FcmService.unsubscribeFromAgency(widget.agency.id);
+      await FcmService.unsubscribeFromAgency(widget.agency.id, siteId: _selectedSite?.id);
     }
 
     if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text(!wasNotified ? 'You\'ll be notified when a slot opens' : 'Notifications turned off')),
+      SnackBar(content: Text(!wasNotified
+          ? 'You\'ll be notified when a slot opens'
+          : 'Notifications turned off')),
     );
   }
 
@@ -48,7 +69,10 @@ class _AgencyDetailScreenState extends State<AgencyDetailScreen> {
     Navigator.pushReplacement(
       context,
       MaterialPageRoute(
-        builder: (_) => AgencyDetailScreen(agency: widget.allAgencies[newIndex], allAgencies: widget.allAgencies),
+        builder: (_) => AgencyDetailScreen(
+          agency: widget.allAgencies[newIndex],
+          allAgencies: widget.allAgencies,
+        ),
       ),
     );
   }
@@ -70,18 +94,25 @@ class _AgencyDetailScreenState extends State<AgencyDetailScreen> {
             children: [
               Row(
                 children: [
-                  IconButton(icon: const Icon(Icons.menu), onPressed: () => Navigator.pop(context)),
+                  IconButton(
+                    icon: const Icon(Icons.menu),
+                    onPressed: () => Navigator.pop(context),
+                  ),
                   const Spacer(),
                   ValueListenableBuilder<Set<String>>(
                     valueListenable: NotificationService.instance.notifiedAgencyIds,
                     builder: (context, notifiedIds, _) {
-                      final isNotified = notifiedIds.contains(agency.id);
+                      final isNotified = notifiedIds.contains(_notifyKey);
                       return ElevatedButton.icon(
                         onPressed: _toggleNotify,
-                        icon: Icon(isNotified ? Icons.notifications_active : Icons.notifications_none),
+                        icon: Icon(isNotified
+                            ? Icons.notifications_active
+                            : Icons.notifications_none),
                         label: Text(isNotified ? 'NOTIFYING' : 'NOTIFY ME'),
                         style: ElevatedButton.styleFrom(
-                          backgroundColor: isNotified ? const Color(0xFF8B5CF6) : Colors.black,
+                          backgroundColor: isNotified
+                              ? const Color(0xFF8B5CF6)
+                              : Colors.black,
                         ),
                       );
                     },
@@ -93,30 +124,72 @@ class _AgencyDetailScreenState extends State<AgencyDetailScreen> {
                 onTap: _openWebsite,
                 child: Container(
                   padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                  decoration: BoxDecoration(color: Colors.black, borderRadius: BorderRadius.circular(12)),
+                  decoration: BoxDecoration(
+                    color: Colors.black,
+                    borderRadius: BorderRadius.circular(12),
+                  ),
                   child: Row(
                     children: [
-                      Expanded(child: Text(agency.name.toUpperCase(), style: const TextStyle(fontWeight: FontWeight.bold))),
+                      Expanded(
+                        child: Text(
+                          agency.name.toUpperCase(),
+                          style: const TextStyle(fontWeight: FontWeight.bold),
+                        ),
+                      ),
                       const Icon(Icons.open_in_new, size: 18),
                     ],
                   ),
                 ),
               ),
+              const SizedBox(height: 12),
+              if (_isDfa && agency.sites.isNotEmpty)
+                DropdownButtonFormField<DfaSite>(
+                  initialValue: _selectedSite,
+                  dropdownColor: Colors.black,
+                  decoration: InputDecoration(
+                    labelText: 'Select Location',
+                    labelStyle: const TextStyle(color: Colors.grey),
+                    filled: true,
+                    fillColor: Colors.black,
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(12),
+                      borderSide: const BorderSide(color: Colors.grey),
+                    ),
+                  ),
+                  items: agency.sites.map((site) {
+                    return DropdownMenuItem(
+                      value: site,
+                      child: Text(site.name, overflow: TextOverflow.ellipsis),
+                    );
+                  }).toList(),
+                  onChanged: (site) => setState(() => _selectedSite = site),
+                ),
               const SizedBox(height: 16),
-              MonthCalendar(highlightedDates: agency.availableDates),
+              MonthCalendar(highlightedDates: _displayDates),
               const SizedBox(height: 16),
-              if (agency.hasSlots) ...[
-                const Text('AVAILABLE DATES:', style: TextStyle(fontWeight: FontWeight.bold)),
+              if (_displayDates.isNotEmpty) ...[
+                const Text('AVAILABLE DATES:',
+                    style: TextStyle(fontWeight: FontWeight.bold)),
                 const SizedBox(height: 8),
-                ...agency.availableDates.map((d) => Text(_formatDate(d), style: const TextStyle(fontWeight: FontWeight.bold))),
+                ..._displayDates.map((d) => Text(_formatDate(d),
+                    style: const TextStyle(fontWeight: FontWeight.bold))),
               ] else
-                const Text('No slots open right now.', style: TextStyle(color: Colors.grey)),
+                const Text('No slots open right now.',
+                    style: TextStyle(color: Colors.grey)),
               const Spacer(),
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  IconButton(icon: const Icon(Icons.arrow_back, size: 32), onPressed: index > 0 ? () => _goToAgency(-1) : null),
-                  IconButton(icon: const Icon(Icons.arrow_forward, size: 32), onPressed: index < widget.allAgencies.length - 1 ? () => _goToAgency(1) : null),
+                  IconButton(
+                    icon: const Icon(Icons.arrow_back, size: 32),
+                    onPressed: index > 0 ? () => _goToAgency(-1) : null,
+                  ),
+                  IconButton(
+                    icon: const Icon(Icons.arrow_forward, size: 32),
+                    onPressed: index < widget.allAgencies.length - 1
+                        ? () => _goToAgency(1)
+                        : null,
+                  ),
                 ],
               ),
             ],

@@ -35,7 +35,6 @@ def get_fcm_access_token():
 
 
 def fetch_all_dates():
-    """Use Playwright to go through DFA appointment flow and collect available dates."""
     results = {}
 
     with sync_playwright() as p:
@@ -51,9 +50,8 @@ def fetch_all_dates():
 
             try:
                 page = context.new_page()
-
-                # Intercept the availability API response
                 api_response = []
+
                 def handle_response(response):
                     if "timeslot/available" in response.url:
                         try:
@@ -65,18 +63,15 @@ def fetch_all_dates():
 
                 page.on("response", handle_response)
 
-                # Step 1: Go to appointment page and agree to terms
                 print(f"\nProcessing {site_name}...")
                 page.goto(f"{BASE_URL}/appointment", wait_until="domcontentloaded", timeout=30000)
                 page.wait_for_timeout(1000)
 
-                # Check the agree checkbox and click Individual
                 page.check("#agree")
                 page.click("button[value='Individual']")
                 page.wait_for_url("**/individual/site", timeout=15000)
                 print(f"  Reached site selection page")
 
-                # Step 2: Select region, country, and site
                 page.select_option("select[name='SiteRegionID']", "1")
                 page.wait_for_timeout(1000)
 
@@ -86,7 +81,6 @@ def fetch_all_dates():
                 page.select_option("select[name='SiteID']", site_id)
                 page.wait_for_timeout(1000)
 
-                # Check all notification checkboxes
                 for cb in ["cl-notif-checkbox", "pubpow-notif-checkbox",
                            "ofw-notif-checkbox", "renewal-notif-checkbox", "co-notif-checkbox"]:
                     try:
@@ -94,15 +88,12 @@ def fetch_all_dates():
                     except Exception:
                         pass
 
-                # Click Next
                 page.click("input[value='Next'], button:has-text('Next')")
                 page.wait_for_url("**/individual/schedule", timeout=15000)
                 print(f"  Reached schedule page")
 
-                # Wait for availability API call to complete
                 page.wait_for_timeout(5000)
 
-                # Parse available dates from intercepted response
                 available_dates = [
                     datetime.utcfromtimestamp(s["AppointmentDate"] / 1000).strftime("%Y-%m-%d")
                     for s in api_response if s.get("IsAvailable")
@@ -111,7 +102,6 @@ def fetch_all_dates():
 
             except Exception as e:
                 print(f"  Error for {site_name}: {e}")
-
             finally:
                 page.close()
 
@@ -124,38 +114,38 @@ def fetch_all_dates():
 
 def get_current_slots():
     res = requests.get(
-        f"{SUPABASE_URL}/rest/v1/slots?agency_id=eq.dfa&select=slot_date",
+        f"{SUPABASE_URL}/rest/v1/slots?agency_id=eq.dfa&select=slot_date,site_id",
         headers=SUPABASE_HEADERS
     )
-    return {row["slot_date"] for row in res.json()}
+    return {(row["site_id"], row["slot_date"]) for row in res.json()}
 
 
-def insert_slot(date_str):
+def insert_slot(date_str, site_id):
     requests.post(
         f"{SUPABASE_URL}/rest/v1/slots",
         headers=SUPABASE_HEADERS,
-        json={"agency_id": "dfa", "slot_date": date_str}
+        json={"agency_id": "dfa", "slot_date": date_str, "site_id": site_id}
     )
-    print(f"  Inserted: {date_str}")
+    print(f"  Inserted: {date_str} (site {site_id})")
 
 
-def delete_slot(date_str):
+def delete_slot(date_str, site_id):
     requests.delete(
-        f"{SUPABASE_URL}/rest/v1/slots?agency_id=eq.dfa&slot_date=eq.{date_str}",
+        f"{SUPABASE_URL}/rest/v1/slots?agency_id=eq.dfa&slot_date=eq.{date_str}&site_id=eq.{site_id}",
         headers=SUPABASE_HEADERS
     )
-    print(f"  Deleted: {date_str}")
+    print(f"  Deleted: {date_str} (site {site_id})")
 
 
-def get_subscribed_tokens():
+def get_subscribed_tokens(site_id):
     res = requests.get(
-        f"{SUPABASE_URL}/rest/v1/subscriptions?agency_id=eq.dfa&select=fcm_token",
+        f"{SUPABASE_URL}/rest/v1/subscriptions?agency_id=eq.dfa&site_id=eq.{site_id}&select=fcm_token",
         headers=SUPABASE_HEADERS
     )
     return [row["fcm_token"] for row in res.json()]
 
 
-def send_push_notification(tokens, new_dates, access_token):
+def send_push_notification(tokens, new_dates, access_token, site_name):
     if not tokens:
         print("No subscribers, skipping notification.")
         return
@@ -171,7 +161,7 @@ def send_push_notification(tokens, new_dates, access_token):
                 "token": token,
                 "notification": {
                     "title": "DFA Slot Available!",
-                    "body": f"New slots open: {', '.join(new_dates)}"
+                    "body": f"{site_name}: {', '.join(new_dates)}"
                 },
                 "data": {"agency_id": "dfa"}
             }
@@ -185,26 +175,33 @@ def run():
 
     all_results = fetch_all_dates()
 
-    scraped_dates = set()
-    for dates in all_results.values():
-        scraped_dates.update(dates)
+    current_slots = get_current_slots()
+    scraped_slots = set()
 
-    print(f"Total available dates found: {len(scraped_dates)}")
+    for site_id, dates in all_results.items():
+        for d in dates:
+            scraped_slots.add((site_id, d))
 
-    current_dates = get_current_slots()
-    new_dates = scraped_dates - current_dates
-    removed_dates = current_dates - scraped_dates
+    new_slots = scraped_slots - current_slots
+    removed_slots = current_slots - scraped_slots
 
-    for d in new_dates:
-        insert_slot(d)
-    for d in removed_dates:
-        delete_slot(d)
+    for site_id, d in new_slots:
+        insert_slot(d, site_id)
+    for site_id, d in removed_slots:
+        delete_slot(d, site_id)
 
-    if new_dates:
-        access_token = get_fcm_access_token()
-        tokens = get_subscribed_tokens()
-        send_push_notification(tokens, list(new_dates), access_token)
-    else:
+    notified_sites = set()
+    for site_id, d in new_slots:
+        if site_id not in notified_sites:
+            tokens = get_subscribed_tokens(site_id)
+            if tokens:
+                access_token = get_fcm_access_token()
+                new_dates_for_site = [d for s, d in new_slots if s == site_id]
+                site_name = next((s["name"] for s in DFA_SITES if s["id"] == site_id), site_id)
+                send_push_notification(tokens, new_dates_for_site, access_token, site_name)
+            notified_sites.add(site_id)
+
+    if not new_slots:
         print("No new slots found.")
 
     print("Scraper finished.")

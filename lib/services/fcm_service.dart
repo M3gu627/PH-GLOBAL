@@ -8,34 +8,36 @@ class FcmService {
 
   static Future<void> init() async {
     await _messaging.requestPermission();
-
     final token = await _messaging.getToken();
     debugPrint('FCM Token: $token');
-
     FirebaseMessaging.onMessage.listen((message) {
       debugPrint('Foreground message: ${message.notification?.title}');
     });
   }
 
-  static Future<void> subscribeToAgency(String agencyId) async {
+  static Future<void> subscribeToAgency(String agencyId, {String? siteId}) async {
     final token = await _messaging.getToken();
     if (token == null) return;
 
     await _client.from('subscriptions').upsert({
       'agency_id': agencyId,
       'fcm_token': token,
+      'site_id': ?siteId,
     });
-    debugPrint('Subscribed to $agencyId');
+    debugPrint('Subscribed to $agencyId (site: $siteId)');
   }
 
-  static Future<void> unsubscribeFromAgency(String agencyId) async {
+  static Future<void> unsubscribeFromAgency(String agencyId, {String? siteId}) async {
     final token = await _messaging.getToken();
     if (token == null) return;
 
-    await _client.from('subscriptions')
+    var query = _client.from('subscriptions')
         .delete()
         .eq('agency_id', agencyId)
         .eq('fcm_token', token);
-    debugPrint('Unsubscribed from $agencyId');
+
+    if (siteId != null) query = query.eq('site_id', siteId);
+    await query;
+    debugPrint('Unsubscribed from $agencyId (site: $siteId)');
   }
 }
