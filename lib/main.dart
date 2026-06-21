@@ -9,6 +9,9 @@ Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
   await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
+
+  // Init FCM listeners only — do NOT request permission here.
+  // Permission is requested after splash so the user sees the app first.
   await FcmService.init();
 
   await Supabase.initialize(
@@ -28,6 +31,7 @@ class MyApp extends StatelessWidget {
       title: 'PH Global',
       debugShowCheckedModeBanner: false,
       theme: ThemeData.dark(),
+      navigatorKey: FcmService.navigatorKey,
       home: const SplashScreen(),
     );
   }
@@ -45,7 +49,13 @@ class _SplashScreenState extends State<SplashScreen> {
   void initState() {
     super.initState();
 
-    Future.delayed(const Duration(seconds: 4), () {
+    Future.delayed(const Duration(seconds: 4), () async {
+      if (!mounted) return;
+
+      // Request notification permission after splash — user sees the app
+      // context first, making the permission prompt feel natural.
+      await FcmService.requestPermission();
+
       if (!mounted) return;
       Navigator.pushReplacement(
         context,
