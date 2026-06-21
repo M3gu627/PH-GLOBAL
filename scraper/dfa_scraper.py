@@ -1,10 +1,9 @@
 import os
 import json
-import threading
+import asyncio
 import requests
 from datetime import datetime
-from concurrent.futures import ThreadPoolExecutor, as_completed
-from playwright.sync_api import sync_playwright
+from playwright.async_api import async_playwright
 import google.auth
 import google.auth.transport.requests
 from google.oauth2 import service_account
@@ -67,9 +66,8 @@ SUPABASE_KEY = os.environ["SUPABASE_KEY"]
 FCM_SERVICE_ACCOUNT = json.loads(os.environ["FCM_SERVICE_ACCOUNT"])
 PROJECT_ID = "ph-global"
 
-# How many browser pages to run in parallel within this job.
-# Keep at 6 — high enough to be fast, low enough to avoid DFA rate-limiting.
-MAX_WORKERS = 6
+# Max concurrent pages inside this batch job.
+MAX_CONCURRENT = 6
 
 SUPABASE_HEADERS = {
     "apikey": SUPABASE_KEY,
@@ -77,37 +75,25 @@ SUPABASE_HEADERS = {
     "Content-Type": "application/json",
 }
 
-# ---------------------------------------------------------------------------
-# Batch slicing (set by GitHub Actions matrix via env vars)
-# BATCH_INDEX: which slice this job handles (0-based)
-# BATCH_TOTAL: total number of parallel jobs
-# ---------------------------------------------------------------------------
-
+# Batch slicing — set by GitHub Actions matrix
 BATCH_INDEX = int(os.environ.get("BATCH_INDEX", "0"))
 BATCH_TOTAL = int(os.environ.get("BATCH_TOTAL", "1"))
 
 
 def get_sites_for_this_batch(sites):
-    """Return the slice of sites assigned to this batch job."""
     return sites[BATCH_INDEX::BATCH_TOTAL]
 
 
 # ---------------------------------------------------------------------------
-# Supabase helpers
+# Supabase helpers (sync — called outside event loop)
 # ---------------------------------------------------------------------------
 
 def get_active_site_ids():
-    """
-    Only return site IDs that have at least one subscriber.
-    This avoids scraping sites nobody cares about yet.
-    Falls back to all sites if Supabase returns nothing (e.g. zero users so far).
-    """
     res = requests.get(
         f"{SUPABASE_URL}/rest/v1/subscriptions?agency_id=eq.dfa&select=site_id",
         headers=SUPABASE_HEADERS,
     )
-    ids = {row["site_id"] for row in res.json()}
-    return ids  # empty set means "scrape all" — handled by caller
+    return {row["site_id"] for row in res.json()}
 
 
 def get_current_slots():
@@ -144,7 +130,7 @@ def get_subscribed_tokens(site_id):
 
 
 # ---------------------------------------------------------------------------
-# FCM helpers
+# FCM helpers (sync)
 # ---------------------------------------------------------------------------
 
 def get_fcm_access_token():
@@ -152,8 +138,8 @@ def get_fcm_access_token():
         FCM_SERVICE_ACCOUNT,
         scopes=["https://www.googleapis.com/auth/firebase.messaging"],
     )
-    request = google.auth.transport.requests.Request()
-    credentials.refresh(request)
+    req = google.auth.transport.requests.Request()
+    credentials.refresh(req)
     return credentials.token
 
 
@@ -161,7 +147,6 @@ def send_push_notification(tokens, new_dates, access_token, site_name):
     if not tokens:
         print("  No subscribers — skipping notification.")
         return
-
     url = f"https://fcm.googleapis.com/v1/projects/{PROJECT_ID}/messages:send"
     headers = {
         "Authorization": f"Bearer {access_token}",
@@ -183,100 +168,91 @@ def send_push_notification(tokens, new_dates, access_token, site_name):
 
 
 # ---------------------------------------------------------------------------
-# Playwright — scrape one site (runs inside a thread)
+# Async Playwright — scrape one site per coroutine
 # ---------------------------------------------------------------------------
 
-# new_page() is not thread-safe; guard it with a lock.
-_page_lock = threading.Lock()
-
-
-def scrape_site(context, site):
+async def scrape_site(context, site, semaphore):
     """
-    Open a browser page, navigate the full DFA booking flow for `site`,
-    intercept the timeslot/available XHR, and return available dates.
-    Returns (site_id, [date_str, ...])
+    Each site gets its own page. The semaphore limits how many run at once.
     """
     site_id = site["id"]
     site_name = site["name"]
     available_dates = []
 
-    with _page_lock:
-        page = context.new_page()
+    async with semaphore:
+        page = await context.new_page()
+        try:
+            api_response = []
 
-    try:
-        api_response = []
-        response_lock = threading.Lock()
-
-        def handle_response(response):
-            if "timeslot/available" in response.url:
-                try:
-                    data = response.json()
-                    with response_lock:
+            async def handle_response(response):
+                if "timeslot/available" in response.url:
+                    try:
+                        data = await response.json()
                         api_response.extend(data)
-                    print(f"  [{site_id}] Intercepted {len(data)} slot records")
-                except Exception as e:
-                    print(f"  [{site_id}] Could not parse timeslot response: {e}")
+                        print(f"  [{site_id}] Intercepted {len(data)} slot records")
+                    except Exception as e:
+                        print(f"  [{site_id}] Could not parse timeslot response: {e}")
 
-        page.on("response", handle_response)
+            page.on("response", handle_response)
 
-        print(f"\n[{site_id}] Starting: {site_name}")
-        page.goto(f"{BASE_URL}/appointment", wait_until="domcontentloaded", timeout=30000)
-        page.wait_for_timeout(1000)
+            print(f"\n[{site_id}] Starting: {site_name}")
+            await page.goto(f"{BASE_URL}/appointment", wait_until="domcontentloaded", timeout=30000)
+            await page.wait_for_timeout(1000)
 
-        page.check("#agree")
-        page.click("button[value='Individual']")
-        page.wait_for_url("**/individual/site", timeout=15000)
+            await page.check("#agree")
+            await page.click("button[value='Individual']")
+            await page.wait_for_url("**/individual/site", timeout=15000)
 
-        page.select_option("select[name='SiteRegionID']", "1")
-        page.wait_for_timeout(1000)
+            await page.select_option("select[name='SiteRegionID']", "1")
+            await page.wait_for_timeout(1000)
 
-        page.select_option("select[name='SiteCountryID']", "1")
-        page.wait_for_timeout(1000)
+            await page.select_option("select[name='SiteCountryID']", "1")
+            await page.wait_for_timeout(1000)
 
-        page.select_option("select[name='SiteID']", site_id)
-        page.wait_for_timeout(1000)
+            await page.select_option("select[name='SiteID']", site_id)
+            await page.wait_for_timeout(1000)
 
-        for cb in [
-            "cl-notif-checkbox",
-            "pubpow-notif-checkbox",
-            "ofw-notif-checkbox",
-            "renewal-notif-checkbox",
-            "co-notif-checkbox",
-        ]:
-            try:
-                page.check(f"#{cb}")
-            except Exception:
-                pass
+            for cb in [
+                "cl-notif-checkbox",
+                "pubpow-notif-checkbox",
+                "ofw-notif-checkbox",
+                "renewal-notif-checkbox",
+                "co-notif-checkbox",
+            ]:
+                try:
+                    await page.check(f"#{cb}")
+                except Exception:
+                    pass
 
-        page.click("input[value='Next'], button:has-text('Next')")
-        page.wait_for_url("**/individual/schedule", timeout=15000)
-        page.wait_for_timeout(5000)
+            await page.click("input[value='Next'], button:has-text('Next')")
+            await page.wait_for_url("**/individual/schedule", timeout=15000)
+            await page.wait_for_timeout(5000)
 
-        available_dates = [
-            datetime.utcfromtimestamp(s["AppointmentDate"] / 1000).strftime("%Y-%m-%d")
-            for s in api_response
-            if s.get("IsAvailable")
-        ]
-        print(f"  [{site_id}] Available dates: {available_dates or 'none'}")
+            available_dates = [
+                datetime.utcfromtimestamp(s["AppointmentDate"] / 1000).strftime("%Y-%m-%d")
+                for s in api_response
+                if s.get("IsAvailable")
+            ]
+            print(f"  [{site_id}] Available dates: {available_dates or 'none'}")
 
-    except Exception as e:
-        print(f"  [{site_id}] Error for {site_name}: {e}")
-    finally:
-        page.close()
+        except Exception as e:
+            print(f"  [{site_id}] Error for {site_name}: {e}")
+        finally:
+            await page.close()
 
     return site_id, available_dates
 
 
 # ---------------------------------------------------------------------------
-# Parallel fetch using ThreadPoolExecutor
+# Async fetch — runs all sites concurrently via asyncio.gather
 # ---------------------------------------------------------------------------
 
-def fetch_all_dates(sites_to_scrape):
+async def fetch_all_dates_async(sites_to_scrape):
     results = {}
 
-    with sync_playwright() as p:
-        browser = p.chromium.launch(args=["--no-sandbox"])
-        context = browser.new_context(
+    async with async_playwright() as p:
+        browser = await p.chromium.launch(args=["--no-sandbox"])
+        context = await browser.new_context(
             user_agent=(
                 "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
                 "AppleWebKit/537.36 (KHTML, like Gecko) "
@@ -284,21 +260,18 @@ def fetch_all_dates(sites_to_scrape):
             )
         )
 
-        with ThreadPoolExecutor(max_workers=MAX_WORKERS) as executor:
-            futures = {
-                executor.submit(scrape_site, context, site): site
-                for site in sites_to_scrape
-            }
-            for future in as_completed(futures):
-                try:
-                    site_id, dates = future.result()
-                    results[site_id] = dates
-                except Exception as e:
-                    site = futures[future]
-                    print(f"  Unhandled error for {site['name']}: {e}")
-                    results[site["id"]] = []
+        semaphore = asyncio.Semaphore(MAX_CONCURRENT)
+        tasks = [scrape_site(context, site, semaphore) for site in sites_to_scrape]
+        site_results = await asyncio.gather(*tasks, return_exceptions=True)
 
-        browser.close()
+        for item in site_results:
+            if isinstance(item, Exception):
+                print(f"  Task failed with exception: {item}")
+            else:
+                site_id, dates = item
+                results[site_id] = dates
+
+        await browser.close()
 
     return results
 
@@ -310,35 +283,34 @@ def fetch_all_dates(sites_to_scrape):
 def run():
     print(f"Scraper started at {datetime.now()} | batch {BATCH_INDEX + 1}/{BATCH_TOTAL}")
 
-    # 1. Determine which sites this batch job is responsible for
+    # 1. Determine sites for this batch
     batch_sites = get_sites_for_this_batch(DFA_SITES)
     print(f"  Batch covers {len(batch_sites)} sites: {[s['id'] for s in batch_sites]}")
 
-    # 2. Filter to only sites that have at least one subscriber
+    # 2. Filter to subscribed sites only
     active_ids = get_active_site_ids()
     if active_ids:
         sites_to_scrape = [s for s in batch_sites if s["id"] in active_ids]
         print(f"  After subscriber filter: {len(sites_to_scrape)} sites to scrape")
     else:
-        # No subscribers yet — scrape the full batch so slots stay up to date
         sites_to_scrape = batch_sites
-        print("  No subscribers found — scraping full batch anyway")
+        print("  No subscribers yet — scraping full batch")
 
     if not sites_to_scrape:
         print("  Nothing to scrape for this batch. Exiting.")
         return
 
-    # 3. Scrape in parallel
-    all_results = fetch_all_dates(sites_to_scrape)
+    # 3. Scrape concurrently via asyncio
+    all_results = asyncio.run(fetch_all_dates_async(sites_to_scrape))
 
-    # 4. Diff against current Supabase state
+    # 4. Diff against Supabase
     current_slots = get_current_slots()
-    scraped_slots = set()
-    for site_id, dates in all_results.items():
-        for d in dates:
-            scraped_slots.add((site_id, d))
+    scraped_slots = {
+        (site_id, d)
+        for site_id, dates in all_results.items()
+        for d in dates
+    }
 
-    # Only diff slots belonging to sites this batch handled
     batch_site_ids = {s["id"] for s in sites_to_scrape}
     current_slots_for_batch = {(sid, d) for sid, d in current_slots if sid in batch_site_ids}
 
@@ -352,11 +324,10 @@ def run():
     for site_id, d in removed_slots:
         delete_slot(d, site_id)
 
-    # 5. Send FCM push for each site that has new slots
+    # 5. FCM push for new slots
     if new_slots:
         access_token = get_fcm_access_token()
         notified_sites = set()
-
         for site_id, _ in new_slots:
             if site_id in notified_sites:
                 continue
