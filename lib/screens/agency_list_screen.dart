@@ -123,7 +123,7 @@ class _AgencyListScreenState extends State<AgencyListScreen> {
       backgroundColor: _background,
       appBar: AppBar(
         backgroundColor: _background,
-        title: const Text('PH GLOBAL'),
+        title: const Text('PH NOTIFY'),
         actions: [
           ValueListenableBuilder<Set<String>>(
             valueListenable: NotificationService.instance.notifiedAgencyIds,
