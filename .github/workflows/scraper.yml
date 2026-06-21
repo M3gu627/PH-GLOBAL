@@ -13,22 +13,22 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
 
       - name: Set up Python
-        uses: actions/setup-python@v4
+        uses: actions/setup-python@v5
         with:
           python-version: '3.11'
 
       - name: Cache pip packages
-        uses: actions/cache@v3
+        uses: actions/cache@v4
         id: pip-cache
         with:
           path: ~/.cache/pip
           key: pip-${{ runner.os }}-v1
 
       - name: Cache Playwright Chromium
-        uses: actions/cache@v3
+        uses: actions/cache@v4
         id: playwright-cache
         with:
           path: ~/.cache/ms-playwright
@@ -46,7 +46,7 @@ jobs:
           playwright install-deps chromium
 
   # ------------------------------------------------------------------
-  # 4 parallel batch jobs — each restores from cache, no fresh installs
+  # 6 parallel batch jobs — each restores from cache, no fresh installs
   # ------------------------------------------------------------------
   scrape:
     needs: setup
@@ -58,21 +58,21 @@ jobs:
         batch_index: [0, 1, 2, 3, 4, 5]
 
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
 
       - name: Set up Python
-        uses: actions/setup-python@v4
+        uses: actions/setup-python@v5
         with:
           python-version: '3.11'
 
       - name: Restore pip cache
-        uses: actions/cache@v3
+        uses: actions/cache@v4
         with:
           path: ~/.cache/pip
           key: pip-${{ runner.os }}-v1
 
       - name: Restore Playwright Chromium cache
-        uses: actions/cache@v3
+        uses: actions/cache@v4
         with:
           path: ~/.cache/ms-playwright
           key: playwright-chromium-${{ runner.os }}-v1

@@ -269,7 +269,7 @@ async def scrape_site_once(browser, site) -> list[str]:
         # Either the event fires (API responded) or we wait up to 15s max
         print(f"    [{site_id}] Waiting for timeslot API response...")
         try:
-            await asyncio.wait_for(slot_received.wait(), timeout=8.0)
+            await asyncio.wait_for(slot_received.wait(), timeout=5.0)
         except asyncio.TimeoutError:
             # API never responded — site may have no slots, that's fine
             print(f"    [{site_id}] No timeslot API response received (likely no slots)")
