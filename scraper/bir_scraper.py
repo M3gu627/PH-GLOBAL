@@ -1,6 +1,6 @@
 import os
 import json
-import asyncio
+import time
 import requests
 from datetime import datetime, timedelta
 from google.oauth2 import service_account
@@ -170,28 +170,38 @@ SUPABASE_HEADERS = {
 # Microsoft Bookings API helpers
 # ---------------------------------------------------------------------------
 
+MAX_RETRIES = 3
+RETRY_DELAY = 5   # seconds, multiplied by attempt number
+REQUEST_DELAY = 2 # seconds between offices
+
+
+def _post_with_retry(url: str, payload: dict, label: str) -> dict:
+    for attempt in range(1, MAX_RETRIES + 1):
+        try:
+            res = requests.post(url, json=payload, timeout=20)
+            return res.json()
+        except Exception as e:
+            print(f"    {label} timeout (attempt {attempt}/{MAX_RETRIES}): {type(e).__name__}")
+            if attempt < MAX_RETRIES:
+                time.sleep(RETRY_DELAY * attempt)
+    return {}
+
+
 def get_services(mailbox: str) -> list[dict]:
-    """Fetch all services for a mailbox. Returns list of {serviceId, staffMemberIds, title}."""
     url = f"{BOOKINGS_API}/{mailbox}/services"
     payload = {"queryOptions": {"filter": {"or": {"filters": [
         {"attributeFilter": {"attributeName": "BookingServiceCategory", "operator": "FILTER_OPERATOR_TYPE_EQUAL", "stringValue": "BOOKING_SERVICE_CATEGORY_SCHEDULED"}},
         {"attributeFilter": {"attributeName": "BookingServiceCategory", "operator": "FILTER_OPERATOR_TYPE_EQUAL", "stringValue": "BOOKING_SERVICE_CATEGORY_ON_DEMAND"}},
     ]}}}}
-    try:
-        res = requests.post(url, json=payload, timeout=15)
-        data = res.json()
-        return [
-            {"serviceId": s["serviceId"], "staffMemberIds": s.get("staffMemberIds", []), "title": s.get("title", "")}
-            for s in data.get("service", [])
-            if not s.get("isHiddenFromCustomers", False)
-        ]
-    except Exception as e:
-        print(f"    services error: {e}")
-        return []
+    data = _post_with_retry(url, payload, "services")
+    return [
+        {"serviceId": s["serviceId"], "staffMemberIds": s.get("staffMemberIds", []), "title": s.get("title", "")}
+        for s in data.get("service", [])
+        if not s.get("isHiddenFromCustomers", False)
+    ]
 
 
 def get_available_dates(mailbox: str, service_id: str, staff_ids: list[str]) -> list[str]:
-    """Call GetStaffAvailability for a 30-day window. Returns available dates (YYYY-MM-DD)."""
     url = f"{BOOKINGS_API}/{mailbox}/GetStaffAvailability"
     start = datetime.utcnow().replace(hour=0, minute=0, second=0, microsecond=0)
     end = start + timedelta(days=30)
@@ -201,19 +211,13 @@ def get_available_dates(mailbox: str, service_id: str, staff_ids: list[str]) -> 
         "startDateTime": {"dateTime": start.strftime("%Y-%m-%dT%H:%M:%S"), "timeZone": "Singapore Standard Time"},
         "endDateTime": {"dateTime": end.strftime("%Y-%m-%dT%H:%M:%S"), "timeZone": "Singapore Standard Time"},
     }
-    try:
-        res = requests.post(url, json=payload, timeout=15)
-        data = res.json()
-        dates = set()
-        for staff in data.get("staffAvailabilityResponse", []):
-            for item in staff.get("availabilityItems", []):
-                if item.get("status") == "BOOKINGSAVAILABILITYSTATUS_AVAILABLE":
-                    date_str = item["startDateTime"]["dateTime"][:10]
-                    dates.add(date_str)
-        return sorted(dates)
-    except Exception as e:
-        print(f"    availability error: {e}")
-        return []
+    data = _post_with_retry(url, payload, "availability")
+    dates = set()
+    for staff in data.get("staffAvailabilityResponse", []):
+        for item in staff.get("availabilityItems", []):
+            if item.get("status") == "BOOKINGSAVAILABILITYSTATUS_AVAILABLE":
+                dates.add(item["startDateTime"]["dateTime"][:10])
+    return sorted(dates)
 
 # ---------------------------------------------------------------------------
 # Supabase helpers
@@ -329,6 +333,7 @@ def run():
 
         scraped_slots[mailbox] = sorted(all_dates)
         print(f"    {len(all_dates)} available dates: {sorted(all_dates) or 'none'}")
+        time.sleep(REQUEST_DELAY)
 
     # Diff against Supabase
     batch_mailboxes = {mailbox for _, mailbox in batch_offices}

@@ -1,4 +1,4 @@
-name: DFA Slot Scraper
+name: BIR Slot Scraper
 
 on:
   schedule:
@@ -6,87 +6,30 @@ on:
   workflow_dispatch:
 
 jobs:
-  # ------------------------------------------------------------------
-  # Installs Playwright + Chromium once and caches for all batch jobs
-  # ------------------------------------------------------------------
-  setup:
-    runs-on: ubuntu-latest
-    timeout-minutes: 5
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Set up Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: '3.11'
-
-      - name: Cache pip packages
-        uses: actions/cache@v4
-        id: pip-cache
-        with:
-          path: ~/.cache/pip
-          key: pip-${{ runner.os }}-v1
-
-      - name: Cache Playwright Chromium
-        uses: actions/cache@v4
-        id: playwright-cache
-        with:
-          path: ~/.cache/ms-playwright
-          key: playwright-chromium-${{ runner.os }}-v1
-
-      - name: Install pip packages
-        if: steps.pip-cache.outputs.cache-hit != 'true'
-        run: pip install requests google-auth playwright
-
-      - name: Install Chromium browser
-        if: steps.playwright-cache.outputs.cache-hit != 'true'
-        run: |
-          pip install playwright
-          playwright install chromium
-          playwright install-deps chromium
-
-  # ------------------------------------------------------------------
-  # 6 parallel batch jobs — each restores from cache, no fresh installs
-  # ------------------------------------------------------------------
   scrape:
-    needs: setup
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 20
     strategy:
-      fail-fast: false
       matrix:
-        batch_index: [0, 1, 2, 3, 4, 5]
+        batch_index: [0, 1, 2, 3]
 
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout
+        uses: actions/checkout@v4
 
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
           python-version: '3.11'
 
-      - name: Restore pip cache
-        uses: actions/cache@v4
-        with:
-          path: ~/.cache/pip
-          key: pip-${{ runner.os }}-v1
+      - name: Install dependencies
+        run: pip install requests google-auth
 
-      - name: Restore Playwright Chromium cache
-        uses: actions/cache@v4
-        with:
-          path: ~/.cache/ms-playwright
-          key: playwright-chromium-${{ runner.os }}-v1
-
-      - name: Install packages (from cache — should be instant)
-        run: |
-          pip install requests google-auth playwright
-          playwright install chromium
-
-      - name: Run scraper (batch ${{ matrix.batch_index }})
+      - name: Run BIR scraper
         env:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}
           FCM_SERVICE_ACCOUNT: ${{ secrets.FCM_SERVICE_ACCOUNT }}
           BATCH_INDEX: ${{ matrix.batch_index }}
-          BATCH_TOTAL: "6"
-        run: python scraper/dfa_scraper.py
+          BATCH_TOTAL: 4
+        run: python scraper/bir_scraper.py
