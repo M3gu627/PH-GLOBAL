@@ -8,7 +8,47 @@ import google.auth.transport.requests
 from google.oauth2 import service_account
 
 DFA_SITES = [
-    {"id": "5", "name": "DFA NCR Central (Robinsons Galleria Ortigas, Quezon City)"},
+    {"id": "10",  "name": "Angeles (SM City Clark, Angeles City)"},
+    {"id": "486", "name": "Antipolo (SM Center, Antipolo City, Rizal)"},
+    {"id": "693", "name": "Antique (CityMall Antique)"},
+    {"id": "11",  "name": "Bacolod (Robinsons Bacolod)"},
+    {"id": "12",  "name": "Baguio (SM City Baguio)"},
+    {"id": "703", "name": "Balanga (The Bunker Building, Capitol Compound)"},
+    {"id": "14",  "name": "Butuan (Robinsons Butuan)"},
+    {"id": "15",  "name": "Cagayan De Oro (BPO Tower SM Downtown Premier)"},
+    {"id": "16",  "name": "Calasiao (Robinsons Calasiao, Pangasinan)"},
+    {"id": "702", "name": "Candon (Candon City Arena)"},
+    {"id": "17",  "name": "Cebu (Robinsons Galleria, Cebu City)"},
+    {"id": "487", "name": "Clarin (Town Center, Clarin, Misamis OCC)"},
+    {"id": "4",   "name": "DFA Manila (Aseana)"},
+    {"id": "5",   "name": "DFA NCR Central (Robinsons Galleria Ortigas, Quezon City)"},
+    {"id": "6",   "name": "DFA NCR East (SM Megamall, Mandaluyong City)"},
+    {"id": "423", "name": "DFA NCR North (Robinsons Novaliches, Quezon City)"},
+    {"id": "7",   "name": "DFA NCR Northeast (Ali Mall Cubao, Quezon City)"},
+    {"id": "704", "name": "DFA NCR South (Festival Mall, Muntinlupa City)"},
+    {"id": "9",   "name": "DFA NCR West (SM City, Manila)"},
+    {"id": "488", "name": "Dasmarinas (SM City Dasmarinas)"},
+    {"id": "19",  "name": "Davao (SM City Davao)"},
+    {"id": "20",  "name": "Dumaguete (Robinsons Dumaguete)"},
+    {"id": "21",  "name": "General Santos (Robinsons Gen. Santos City)"},
+    {"id": "22",  "name": "Iloilo (Robinsons Iloilo)"},
+    {"id": "690", "name": "Kidapawan (Kidapawan City)"},
+    {"id": "23",  "name": "La Union (CSI Mall San Fernando)"},
+    {"id": "24",  "name": "Legazpi (Pacific Mall Legazpi)"},
+    {"id": "13",  "name": "Lipa (Robinsons Lipa)"},
+    {"id": "25",  "name": "Lucena (Pacific Mall, Lucena)"},
+    {"id": "489", "name": "Malolos (CTTCH., Xentro Mall, Malolos City)"},
+    {"id": "705", "name": "Olongapo (SM City Olongapo Central)"},
+    {"id": "694", "name": "Pagadian (C3 Mall, Pagadian City)"},
+    {"id": "27",  "name": "Pampanga (Robinsons StarMills San Fernando)"},
+    {"id": "553", "name": "Paniqui, Tarlac (WalterMart)"},
+    {"id": "26",  "name": "Puerto Princesa (Robinsons Palawan)"},
+    {"id": "425", "name": "Santiago, Isabela (Robinsons Place Santiago)"},
+    {"id": "28",  "name": "Tacloban (Robinsons N. Abucay, Tac. City)"},
+    {"id": "709", "name": "Tagbilaran (Alturas Mall, Tagbilaran City)"},
+    {"id": "491", "name": "Tagum (Robinsons Place of Tagum)"},
+    {"id": "29",  "name": "Tuguegarao (Reg. Govt Center, Tuguegarao City)"},
+    {"id": "30",  "name": "Zamboanga (Go-Velayo Bldg. Vet. Ave. Zambo)"},
 ]
 
 BASE_URL = "https://passport.gov.ph"
@@ -52,12 +92,12 @@ def fetch_all_dates():
                 page = context.new_page()
                 api_response = []
 
-                def handle_response(response):
+                def handle_response(response, sid=site_id, sname=site_name):
                     if "timeslot/available" in response.url:
                         try:
                             data = response.json()
                             api_response.extend(data)
-                            print(f"  Intercepted {len(data)} slots for {site_name}")
+                            print(f"  Intercepted {len(data)} slots for {sname}")
                         except Exception as e:
                             print(f"  Could not parse timeslot response: {e}")
 

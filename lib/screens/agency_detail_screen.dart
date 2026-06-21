@@ -87,12 +87,12 @@ class _AgencyDetailScreenState extends State<AgencyDetailScreen> {
     return Scaffold(
       backgroundColor: const Color(0xFF0F0F0F),
       body: SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.all(16),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              Row(
+        child: Column(
+          children: [
+            // Fixed top bar
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 16, 16, 0),
+              child: Row(
                 children: [
                   IconButton(
                     icon: const Icon(Icons.menu),
@@ -119,65 +119,81 @@ class _AgencyDetailScreenState extends State<AgencyDetailScreen> {
                   ),
                 ],
               ),
-              const SizedBox(height: 12),
-              GestureDetector(
-                onTap: _openWebsite,
-                child: Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                  decoration: BoxDecoration(
-                    color: Colors.black,
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  child: Row(
-                    children: [
-                      Expanded(
-                        child: Text(
-                          agency.name.toUpperCase(),
-                          style: const TextStyle(fontWeight: FontWeight.bold),
+            ),
+
+            // Scrollable content
+            Expanded(
+              child: SingleChildScrollView(
+                padding: const EdgeInsets.all(16),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    GestureDetector(
+                      onTap: _openWebsite,
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                        decoration: BoxDecoration(
+                          color: Colors.black,
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        child: Row(
+                          children: [
+                            Expanded(
+                              child: Text(
+                                agency.name.toUpperCase(),
+                                style: const TextStyle(fontWeight: FontWeight.bold),
+                              ),
+                            ),
+                            const Icon(Icons.open_in_new, size: 18),
+                          ],
                         ),
                       ),
-                      const Icon(Icons.open_in_new, size: 18),
-                    ],
-                  ),
+                    ),
+                    const SizedBox(height: 12),
+                    if (_isDfa && agency.sites.isNotEmpty)
+                      DropdownButtonFormField<DfaSite>(
+                        value: _selectedSite,
+                        dropdownColor: Colors.black,
+                        decoration: InputDecoration(
+                          labelText: 'Select Location',
+                          labelStyle: const TextStyle(color: Colors.grey),
+                          filled: true,
+                          fillColor: Colors.black,
+                          border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(12),
+                            borderSide: const BorderSide(color: Colors.grey),
+                          ),
+                        ),
+                        items: agency.sites.map((site) {
+                          return DropdownMenuItem(
+                            value: site,
+                            child: Text(site.name, overflow: TextOverflow.ellipsis),
+                          );
+                        }).toList(),
+                        onChanged: (site) => setState(() => _selectedSite = site),
+                      ),
+                    const SizedBox(height: 16),
+                    MonthCalendar(highlightedDates: _displayDates),
+                    const SizedBox(height: 16),
+                    if (_displayDates.isNotEmpty) ...[
+                      const Text('AVAILABLE DATES:',
+                          style: TextStyle(fontWeight: FontWeight.bold)),
+                      const SizedBox(height: 8),
+                      ..._displayDates.map((d) => Text(_formatDate(d),
+                          style: const TextStyle(fontWeight: FontWeight.bold))),
+                    ] else
+                      const Text('No slots open right now.',
+                          style: TextStyle(color: Colors.grey)),
+                    const SizedBox(height: 24),
+                  ],
                 ),
               ),
-              const SizedBox(height: 12),
-              if (_isDfa && agency.sites.isNotEmpty)
-                DropdownButtonFormField<DfaSite>(
-                  initialValue: _selectedSite,
-                  dropdownColor: Colors.black,
-                  decoration: InputDecoration(
-                    labelText: 'Select Location',
-                    labelStyle: const TextStyle(color: Colors.grey),
-                    filled: true,
-                    fillColor: Colors.black,
-                    border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(12),
-                      borderSide: const BorderSide(color: Colors.grey),
-                    ),
-                  ),
-                  items: agency.sites.map((site) {
-                    return DropdownMenuItem(
-                      value: site,
-                      child: Text(site.name, overflow: TextOverflow.ellipsis),
-                    );
-                  }).toList(),
-                  onChanged: (site) => setState(() => _selectedSite = site),
-                ),
-              const SizedBox(height: 16),
-              MonthCalendar(highlightedDates: _displayDates),
-              const SizedBox(height: 16),
-              if (_displayDates.isNotEmpty) ...[
-                const Text('AVAILABLE DATES:',
-                    style: TextStyle(fontWeight: FontWeight.bold)),
-                const SizedBox(height: 8),
-                ..._displayDates.map((d) => Text(_formatDate(d),
-                    style: const TextStyle(fontWeight: FontWeight.bold))),
-              ] else
-                const Text('No slots open right now.',
-                    style: TextStyle(color: Colors.grey)),
-              const Spacer(),
-              Row(
+            ),
+
+            // Fixed bottom nav
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+              child: Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
                   IconButton(
@@ -192,8 +208,8 @@ class _AgencyDetailScreenState extends State<AgencyDetailScreen> {
                   ),
                 ],
               ),
-            ],
-          ),
+            ),
+          ],
         ),
       ),
     );
