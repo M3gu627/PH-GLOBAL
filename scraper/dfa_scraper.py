@@ -233,24 +233,30 @@ async def scrape_site_once(browser, site) -> list[str]:
         )
 
         # --- Step 3: Select Region → Country → Site ---
+        # Use fixed waits instead of watching for option population —
+        # the DFA site's AJAX timing is inconsistent across runners.
         await page.select_option("select[name='SiteRegionID']", "1")
+        await page.wait_for_timeout(3000)  # Wait for country AJAX to complete
 
-        # Wait for country dropdown to populate after region selection
-        await page.wait_for_selector(
-            "select[name='SiteCountryID'] option:not([value=''])",
-            timeout=15000,
+        # Debug: log what options are available in the country dropdown
+        country_options = await page.eval_on_selector_all(
+            "select[name='SiteCountryID'] option",
+            "els => els.map(e => ({value: e.value, text: e.textContent.trim()}))"
         )
+        print(f"    [{site_id}] Country options available: {country_options[:5]}")
+
         await page.select_option("select[name='SiteCountryID']", "1")
+        await page.wait_for_timeout(3000)  # Wait for site AJAX to complete
 
-        # Wait for site dropdown to populate after country selection
-        await page.wait_for_selector(
-            "select[name='SiteID'] option:not([value=''])",
-            timeout=15000,
+        # Debug: log how many site options loaded
+        site_options = await page.eval_on_selector_all(
+            "select[name='SiteID'] option",
+            "els => els.map(e => e.value).filter(v => v !== '')"
         )
-        await page.select_option("select[name='SiteID']", site_id)
+        print(f"    [{site_id}] Site options available: {len(site_options)} sites")
 
-        # Small pause for any JS to react to the site selection
-        await page.wait_for_timeout(800)
+        await page.select_option("select[name='SiteID']", site_id)
+        await page.wait_for_timeout(1000)
 
         # --- Step 4: Check notification checkboxes (best-effort) ---
         for cb in [
@@ -328,8 +334,11 @@ async def scrape_site_with_retry(browser, site) -> tuple[str, list[str]]:
 # (GitHub Actions matrix provides parallelism across jobs)
 # ---------------------------------------------------------------------------
 
-async def fetch_all_dates_async(sites_to_scrape) -> dict[str, list[str]]:
+async def fetch_all_dates_async(sites_to_scrape) -> dict:
     results = {}
+    site_log = []  # Tracks status of each site for the final summary
+    total = len(sites_to_scrape)
+    batch_start = datetime.now()
 
     async with async_playwright() as p:
         browser = await p.chromium.launch(
@@ -337,7 +346,7 @@ async def fetch_all_dates_async(sites_to_scrape) -> dict[str, list[str]]:
             args=[
                 "--no-sandbox",
                 "--disable-setuid-sandbox",
-                "--disable-dev-shm-usage",   # Prevents shared memory crashes in CI
+                "--disable-dev-shm-usage",
                 "--disable-gpu",
                 "--disable-extensions",
                 "--disable-background-networking",
@@ -346,13 +355,54 @@ async def fetch_all_dates_async(sites_to_scrape) -> dict[str, list[str]]:
             ],
         )
 
-        for site in sites_to_scrape:
+        for i, site in enumerate(sites_to_scrape, 1):
+            site_start = datetime.now()
+            elapsed_batch = (site_start - batch_start).seconds
+
+            print(f"\n{'='*60}")
+            print(f"  PROGRESS: {i}/{total} sites | Batch elapsed: {elapsed_batch}s")
+            print(f"  Remaining: {total - i + 1} sites")
+            print(f"{'='*60}")
+
             site_id, dates = await scrape_site_with_retry(browser, site)
             results[site_id] = dates
-            # Small breathing room between sites to be polite to the DFA server
+
+            site_elapsed = (datetime.now() - site_start).seconds
+            status = "✓ SUCCESS" if dates is not None else "✗ FAILED"
+            slot_count = len(dates) if dates else 0
+
+            site_log.append({
+                "id": site_id,
+                "name": site["name"],
+                "status": status,
+                "slots": slot_count,
+                "elapsed": site_elapsed,
+            })
+
+            print(f"  [{site_id}] {status} | {slot_count} slots found | took {site_elapsed}s")
+
             await asyncio.sleep(1)
 
         await browser.close()
+
+    # Final summary table
+    total_elapsed = (datetime.now() - batch_start).seconds
+    print(f"\n{'='*60}")
+    print(f"  BATCH COMPLETE — {total_elapsed}s total")
+    print(f"{'='*60}")
+    print(f"  {'ID':<6} {'STATUS':<12} {'SLOTS':<8} {'TIME':<8} NAME")
+    print(f"  {'-'*54}")
+    for log in site_log:
+        print(
+            f"  {log['id']:<6} {log['status']:<12} {log['slots']:<8} "
+            f"{str(log['elapsed'])+'s':<8} {log['name']}"
+        )
+    succeeded = sum(1 for l in site_log if "SUCCESS" in l["status"])
+    failed = sum(1 for l in site_log if "FAILED" in l["status"])
+    total_slots = sum(l["slots"] for l in site_log)
+    print(f"  {'-'*54}")
+    print(f"  Succeeded: {succeeded} | Failed: {failed} | Total slots found: {total_slots}")
+    print(f"{'='*60}\n")
 
     return results
 
