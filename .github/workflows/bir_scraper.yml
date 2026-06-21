@@ -2,13 +2,16 @@ name: BIR Slot Scraper
 
 on:
   schedule:
-    - cron: '*/30 * * * *'  # Every 30 minutes
-  workflow_dispatch:         # Manual trigger
+    - cron: '*/30 * * * *'
+  workflow_dispatch:
 
 jobs:
   scrape:
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 20
+    strategy:
+      matrix:
+        batch_index: [0, 1, 2, 3]
 
     steps:
       - name: Checkout
@@ -27,4 +30,6 @@ jobs:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}
           FCM_SERVICE_ACCOUNT: ${{ secrets.FCM_SERVICE_ACCOUNT }}
+          BATCH_INDEX: ${{ matrix.batch_index }}
+          BATCH_TOTAL: 4
         run: python scraper/bir_scraper.py
