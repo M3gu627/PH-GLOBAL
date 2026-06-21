@@ -183,8 +183,8 @@ async def scrape_site_once(browser, site) -> list[str]:
     site_name = site["name"]
     api_response = []
 
-    # Fresh context per attempt — clears cookies/session state between retries
-    context = await browser.new_context(
+    # Browser is fresh per site — open page directly, no context needed
+    page = await browser.new_page(
         user_agent=(
             "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
             "AppleWebKit/537.36 (KHTML, like Gecko) "
@@ -193,7 +193,6 @@ async def scrape_site_once(browser, site) -> list[str]:
         viewport={"width": 1280, "height": 800},
         locale="en-US",
     )
-    page = await context.new_page()
 
     # Intercept the timeslot API response
     slot_received = asyncio.Event()
@@ -300,7 +299,6 @@ async def scrape_site_once(browser, site) -> list[str]:
 
     finally:
         await page.close()
-        await context.close()
 
 
 # ---------------------------------------------------------------------------
@@ -336,25 +334,22 @@ async def scrape_site_with_retry(browser, site) -> tuple[str, list[str]]:
 
 async def fetch_all_dates_async(sites_to_scrape) -> dict:
     results = {}
-    site_log = []  # Tracks status of each site for the final summary
+    site_log = []
     total = len(sites_to_scrape)
     batch_start = datetime.now()
 
-    async with async_playwright() as p:
-        browser = await p.chromium.launch(
-            headless=True,
-            args=[
-                "--no-sandbox",
-                "--disable-setuid-sandbox",
-                "--disable-dev-shm-usage",
-                "--disable-gpu",
-                "--disable-extensions",
-                "--disable-background-networking",
-                "--no-first-run",
-                "--no-default-browser-check",
-            ],
-        )
+    BROWSER_ARGS = [
+        "--no-sandbox",
+        "--disable-setuid-sandbox",
+        "--disable-dev-shm-usage",
+        "--disable-gpu",
+        "--disable-extensions",
+        "--disable-background-networking",
+        "--no-first-run",
+        "--no-default-browser-check",
+    ]
 
+    async with async_playwright() as p:
         for i, site in enumerate(sites_to_scrape, 1):
             site_start = datetime.now()
             elapsed_batch = (site_start - batch_start).seconds
@@ -364,11 +359,17 @@ async def fetch_all_dates_async(sites_to_scrape) -> dict:
             print(f"  Remaining: {total - i + 1} sites")
             print(f"{'='*60}")
 
-            site_id, dates = await scrape_site_with_retry(browser, site)
+            # Fresh browser per site — fully isolated, no shared cache or state
+            browser = await p.chromium.launch(headless=True, args=BROWSER_ARGS)
+            try:
+                site_id, dates = await scrape_site_with_retry(browser, site)
+            finally:
+                await browser.close()
+
             results[site_id] = dates
 
             site_elapsed = (datetime.now() - site_start).seconds
-            status = "✓ SUCCESS" if dates is not None else "✗ FAILED"
+            status = "✓ SUCCESS" if dates else "✗ FAILED"
             slot_count = len(dates) if dates else 0
 
             site_log.append({
@@ -381,9 +382,8 @@ async def fetch_all_dates_async(sites_to_scrape) -> dict:
 
             print(f"  [{site_id}] {status} | {slot_count} slots found | took {site_elapsed}s")
 
-            await asyncio.sleep(1)
-
-        await browser.close()
+            # Brief pause between sites
+            await asyncio.sleep(2)
 
     # Final summary table
     total_elapsed = (datetime.now() - batch_start).seconds
