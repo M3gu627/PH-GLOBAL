@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'dart:io';
@@ -36,6 +37,8 @@ class MyApp extends StatelessWidget {
   }
 }
 
+// ── Splash Screen ─────────────────────────────────────────────────────────────
+
 class SplashScreen extends StatefulWidget {
   const SplashScreen({super.key});
 
@@ -51,6 +54,9 @@ class _SplashScreenState extends State<SplashScreen> {
   }
 
   Future<bool> _hasInternet() async {
+    // dart:io is not available on Flutter Web — skip the check
+    if (kIsWeb) return true;
+
     try {
       final result = await InternetAddress.lookup('google.com')
           .timeout(const Duration(seconds: 3));
@@ -149,6 +155,8 @@ class _OfflineScreenState extends State<OfflineScreen> {
   bool _isRetrying = false;
 
   Future<bool> _hasInternet() async {
+    if (kIsWeb) return true;
+
     try {
       final result = await InternetAddress.lookup('google.com')
           .timeout(const Duration(seconds: 3));
