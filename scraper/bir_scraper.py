@@ -171,15 +171,15 @@ SUPABASE_HEADERS = {
 # Microsoft Bookings API helpers
 # ---------------------------------------------------------------------------
 
-MAX_RETRIES = 1
-RETRY_DELAY = 0
-REQUEST_DELAY = 1 # seconds between offices
+MAX_RETRIES = 3
+RETRY_DELAY = 10  # seconds, multiplied by attempt number
+REQUEST_DELAY = 2 # seconds between offices
 
 
 def _post_with_retry(url: str, payload: dict, label: str) -> dict:
     for attempt in range(1, MAX_RETRIES + 1):
         try:
-            res = requests.post(url, json=payload, timeout=5)
+            res = requests.post(url, json=payload, timeout=15)
             return res.json()
         except Exception as e:
             print(f"    {label} timeout (attempt {attempt}/{MAX_RETRIES}): {type(e).__name__}")
@@ -317,14 +317,14 @@ def run():
         return
 
     current_slots = get_current_slots()
-    scraped_slots: dict[str, list[str]] = {}
+    scraped_slots: dict[str, list[str] | None] = {}
 
     for name, mailbox in batch_offices:
         print(f"\n  {name}")
         services = get_services(mailbox)
         if not services:
             print("    No services found — skipping")
-            scraped_slots[mailbox] = []
+            scraped_slots[mailbox] = None  # None = failed, [] = no slots
             continue
 
         # Collect available dates across all services
@@ -340,12 +340,11 @@ def run():
     # Diff against Supabase
     batch_mailboxes = {mailbox for _, mailbox in batch_offices}
     current_for_batch = {(sid, d) for sid, d in current_slots if sid in batch_mailboxes}
-    scraped_set = {(mailbox, d) for mailbox, dates in scraped_slots.items() for d in dates}
+    scraped_set = {(mailbox, d) for mailbox, dates in scraped_slots.items() if dates for d in dates}
 
     new_slots = scraped_set - current_for_batch
     removed_slots = current_for_batch - scraped_set
 
-    print(f"\n  New: {len(new_slots)} | Removed: {len(removed_slots)}")
     for mailbox, d in new_slots:
         insert_slot(mailbox, d)
     for mailbox, d in removed_slots:
@@ -364,10 +363,29 @@ def run():
                 new_dates = [d for m, d in new_slots if m == mailbox]
                 send_push(tokens, office_map.get(mailbox, mailbox), new_dates, access_token)
             notified.add(mailbox)
-    else:
-        print("  No new slots — no notifications sent.")
 
-    print(f"\nBIR scraper finished at {datetime.now()}")
+    # Summary
+    total = len(batch_offices)
+    succeeded  = sum(1 for m, dates in scraped_slots.items() if dates is not None and len(dates) > 0)
+    no_slots   = sum(1 for m, dates in scraped_slots.items() if dates is not None and len(dates) == 0)
+    failed     = sum(1 for m, dates in scraped_slots.items() if dates is None)
+    skipped    = total - len(scraped_slots)
+    total_dates = sum(len(d) for d in scraped_slots.values() if d)
+
+    print(f"\n{'='*60}")
+    print(f"  BATCH {BATCH_INDEX + 1}/{BATCH_TOTAL} SUMMARY")
+    print(f"{'='*60}")
+    print(f"  Offices in batch : {total}")
+    print(f"  ✓ Had slots      : {succeeded}")
+    print(f"  ○ No slots       : {no_slots}")
+    print(f"  ✗ Failed/timeout : {failed + skipped}")
+    print(f"  Total slot dates : {total_dates}")
+    print(f"  New inserted     : {len(new_slots)}")
+    print(f"  Removed          : {len(removed_slots)}")
+    print(f"  Notifications    : {'sent' if new_slots else 'none'}")
+    print(f"{'='*60}")
+    print(f"  Finished at {datetime.now()}")
+    print(f"{'='*60}\n")
 
 
 if __name__ == "__main__":
