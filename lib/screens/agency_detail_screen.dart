@@ -28,11 +28,14 @@ class _AgencyDetailScreenState extends State<AgencyDetailScreen> {
   List<DateTime> get _displayDates =>
       _selectedSite?.availableDates ?? widget.agency.availableDates;
 
-  bool get _isDfa => widget.agency.id == 'dfa';
+  // True for any agency that uses site-based selection (DFA, BIR)
+  bool get _hasSites => widget.agency.sites.isNotEmpty;
 
-  String get _notifyKey => _isDfa && _selectedSite != null
+  String get _notifyKey => _hasSites && _selectedSite != null
       ? '${widget.agency.id}_${_selectedSite!.id}'
       : widget.agency.id;
+
+  String get _dropdownLabel => widget.agency.id == 'bir' ? 'Select RDO' : 'Select Location';
 
   Future<void> _openWebsite() async {
     final uri = Uri.parse(widget.agency.websiteUrl);
@@ -45,12 +48,10 @@ class _AgencyDetailScreenState extends State<AgencyDetailScreen> {
 
   Future<void> _toggleNotify() async {
     final wasNotified = NotificationService.instance.isNotified(_notifyKey);
-
     await NotificationService.instance.toggle(
       widget.agency.id,
       siteId: _selectedSite?.id,
     );
-
     if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(content: Text(!wasNotified
@@ -148,13 +149,13 @@ class _AgencyDetailScreenState extends State<AgencyDetailScreen> {
                     ),
                     const SizedBox(height: 12),
 
-                    if (_isDfa && agency.sites.isNotEmpty)
+                    if (_hasSites)
                       DropdownButtonFormField<DfaSite>(
                         value: _selectedSite,
                         isExpanded: true,
                         dropdownColor: Colors.black,
                         decoration: InputDecoration(
-                          labelText: 'Select Location',
+                          labelText: _dropdownLabel,
                           labelStyle: const TextStyle(color: Colors.grey),
                           filled: true,
                           fillColor: Colors.black,
