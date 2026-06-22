@@ -1,6 +1,7 @@
 import os
 import json
 import time
+import random
 import requests
 from datetime import datetime, timedelta
 from google.oauth2 import service_account
@@ -170,15 +171,15 @@ SUPABASE_HEADERS = {
 # Microsoft Bookings API helpers
 # ---------------------------------------------------------------------------
 
-MAX_RETRIES = 2
-RETRY_DELAY = 2   # seconds, multiplied by attempt number
+MAX_RETRIES = 1
+RETRY_DELAY = 0
 REQUEST_DELAY = 1 # seconds between offices
 
 
 def _post_with_retry(url: str, payload: dict, label: str) -> dict:
     for attempt in range(1, MAX_RETRIES + 1):
         try:
-            res = requests.post(url, json=payload, timeout=10)
+            res = requests.post(url, json=payload, timeout=5)
             return res.json()
         except Exception as e:
             print(f"    {label} timeout (attempt {attempt}/{MAX_RETRIES}): {type(e).__name__}")
@@ -301,6 +302,7 @@ def run():
     print(f"BIR scraper started at {datetime.now()} | batch {BATCH_INDEX + 1}/{BATCH_TOTAL}")
 
     offices = list(BIR_OFFICES.items())
+    random.shuffle(offices)
     batch_offices = offices[BATCH_INDEX::BATCH_TOTAL]
 
     active_ids = get_active_office_ids()
@@ -333,7 +335,7 @@ def run():
 
         scraped_slots[mailbox] = sorted(all_dates)
         print(f"    {len(all_dates)} available dates: {sorted(all_dates) or 'none'}")
-        time.sleep(REQUEST_DELAY)
+        time.sleep(random.uniform(0.5, 2.0))
 
     # Diff against Supabase
     batch_mailboxes = {mailbox for _, mailbox in batch_offices}
