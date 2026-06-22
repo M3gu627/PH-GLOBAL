@@ -16,6 +16,7 @@ dependencies:
   supabase_flutter: ^2.15.0
   firebase_core: ^4.11.0
   firebase_messaging: ^16.4.0
+  connectivity_plus: ^6.0.3
 
 dev_dependencies:
   flutter_test:
