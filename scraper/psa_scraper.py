@@ -18,7 +18,7 @@ OUTLETS_FILE = os.path.join(os.path.dirname(__file__), "psa_outlet_ids.json")
 MAILTM_API = "https://api.mail.tm"
 
 # ── DEBUG FLAG — set to False for production ──────────────────────────────────
-DEBUG = True
+DEBUG = False
 
 REGION_MAP = {
     "NCR": "NCR", "BARMM": "BARMM", "CAR": "CAR", "CARAGA": "CARAGA",
@@ -329,7 +329,7 @@ async def main():
     cookies = load_cookies()
 
     async with async_playwright() as p:
-        browser = await p.chromium.launch(headless=not DEBUG)
+        browser = await p.chromium.launch(headless= True)
         context = await browser.new_context()
 
         if cookies:
