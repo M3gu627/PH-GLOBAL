@@ -291,9 +291,16 @@ async def do_full_flow(page, first_outlet, context, _retry_count=0):
     print(f"  [6] URL: {page.url}")
     await dump_page_state(page, "Step 6")
     if "certificates" in page.url:
+        # Select type by index (first real option)
         await livewire_select(page, "select[wire\\:model\\.lazy='type']", index=1)
         await asyncio.sleep(1)
-        await livewire_select(page, "select[wire\\:model\\.lazy='relationship']", value="self")
+
+        # Print available relationship options then select first one
+        rel_select = page.locator("select[wire\\:model\\.lazy='relationship']")
+        options = await rel_select.locator("option").all()
+        option_values = [(await o.get_attribute("value"), await o.inner_text()) for o in options]
+        print(f"  📋 Relationship options: {option_values}")
+        await livewire_select(page, "select[wire\\:model\\.lazy='relationship']", index=1)
         await asyncio.sleep(2)
         await click_next(page)
 
