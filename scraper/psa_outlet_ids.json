@@ -1,0 +1,670 @@
+[
+  {
+    "outlet_id": "1",
+    "name": "PSA CRS Outlet East Avenue",
+    "region": "NCR",
+    "error": "Timeout 30000ms exceeded.\n=========================== logs ===========================\nwaiting for navigation until 'load'\n============================================================"
+  },
+  {
+    "outlet_id": "3",
+    "name": "PSA CRS Outlet Makati",
+    "region": "NCR",
+    "error": "Timeout 30000ms exceeded.\n=========================== logs ===========================\nwaiting for navigation until 'load'\n============================================================"
+  },
+  {
+    "outlet_id": "4",
+    "name": "PSA CRS Outlet North Caloocan",
+    "region": "NCR",
+    "slug": "for",
+    "booking_id": "28180104",
+    "calendar_url": "https://crs-appointment.psahelpline.ph/book/at/CALOOCAN/for/28180104/choose-slot"
+  },
+  {
+    "outlet_id": "5",
+    "name": "PSA CRS Outlet Muntinlupa",
+    "region": "NCR",
+    "slug": "for",
+    "booking_id": "28180104",
+    "calendar_url": "https://crs-appointment.psahelpline.ph/book/at/MUNTINLUPA/for/28180104/choose-slot"
+  },
+  {
+    "outlet_id": "6",
+    "name": "PSA CRS Outlet Paranaque",
+    "region": "NCR",
+    "slug": "for",
+    "booking_id": "28180104",
+    "calendar_url": "https://crs-appointment.psahelpline.ph/book/at/PARANAQUE/for/28180104/choose-slot"
+  },
+  {
+    "outlet_id": "7",
+    "name": "PSA CRS Outlet Valenzuela",
+    "region": "NCR",
+    "slug": "for",
+    "booking_id": "28180104",
+    "calendar_url": "https://crs-appointment.psahelpline.ph/book/at/VALENZUELA/for/28180104/choose-slot"
+  },
+  {
+    "outlet_id": "24",
+    "name": "PSA CRS Outlet Cotabato City",
+    "region": "BARMM",
+    "slug": "for",
+    "booking_id": "28180104",
+    "calendar_url": "https://crs-appointment.psahelpline.ph/book/at/COTABATO%20CITY/for/28180104/choose-slot"
+  },
+  {
+    "outlet_id": "73",
+    "name": "PSA CRS Outlet Bongao Tawitawi",
+    "region": "BARMM",
+    "slug": "for",
+    "booking_id": "28180104",
+    "calendar_url": "https://crs-appointment.psahelpline.ph/book/at/CRS%20OUTLET%20BONGAO%20TAWI-TAWI/for/28180104/choose-slot"
+  },
+  {
+    "outlet_id": "79",
+    "name": "PSA CRS Outlet Marawi City",
+    "region": "BARMM",
+    "slug": "for",
+    "booking_id": "28180104",
+    "calendar_url": "https://crs-appointment.psahelpline.ph/book/at/PSA%20CRS%20Outlet%20Marawi%20City/for/28180104/choose-slot"
+  },
+  {
+    "outlet_id": "35",
+    "name": "PSA CRS Outlet Baguio City",
+    "region": "CAR",
+    "slug": "for",
+    "booking_id": "28180104",
+    "calendar_url": "https://crs-appointment.psahelpline.ph/book/at/Baguio%20City/for/28180104/choose-slot"
+  },
+  {
+    "outlet_id": "36",
+    "name": "PSA CRS Outlet Abra",
+    "region": "CAR",
+    "slug": "for",
+    "booking_id": "28180104",
+    "calendar_url": "https://crs-appointment.psahelpline.ph/book/at/Abra/for/28180104/choose-slot"
+  },
+  {
+    "outlet_id": "53",
+    "name": "PSA CRS Outlet Tabuk City Kalinga",
+    "region": "CAR",
+    "slug": "for",
+    "booking_id": "28180104",
+    "calendar_url": "https://crs-appointment.psahelpline.ph/book/at/Tabuk%20City,%20Kalinga%20CRS%20Outlet/for/28180104/choose-slot"
+  },
+  {
+    "outlet_id": "81",
+    "name": "PSA CRS Outlet Mobile UP Baguio",
+    "region": "CAR",
+    "slug": "for",
+    "booking_id": "28180104",
+    "calendar_url": "https://crs-appointment.psahelpline.ph/book/at/PSA%20CRS%20Mobile%20Outlet%20-%20UP%20Baguio/for/28180104/choose-slot"
+  },
+  {
+    "outlet_id": "86",
+    "name": "PSA CRS Outlet Luna Apayao",
+    "region": "CAR",
+    "slug": "for",
+    "booking_id": "28180104",
+    "calendar_url": "https://crs-appointment.psahelpline.ph/book/at/PSA%20CRS%20Outlet%20Luna,%20Apayao/for/28180104/choose-slot"
+  },
+  {
+    "outlet_id": "21",
+    "name": "PSA CRS Outlet Butuan City",
+    "region": "CARAGA",
+    "slug": "for",
+    "booking_id": "28180104",
+    "calendar_url": "https://crs-appointment.psahelpline.ph/book/at/Butuan%20City,%20Agusan%20Del%20Norte/for/28180104/choose-slot"
+  },
+  {
+    "outlet_id": "46",
+    "name": "PSA CRS Outlet Surigao City",
+    "region": "CARAGA",
+    "slug": "for",
+    "booking_id": "28180104",
+    "calendar_url": "https://crs-appointment.psahelpline.ph/book/at/SURIGAO%20CITY/for/28180104/choose-slot"
+  },
+  {
+    "outlet_id": "72",
+    "name": "PSA CRS Outlet Tandag City",
+    "region": "CARAGA",
+    "slug": "for",
+    "booking_id": "28180104",
+    "calendar_url": "https://crs-appointment.psahelpline.ph/book/at/CRS%20Outlet%20Tandag%20City,%20Surigao%20Del%20Sur/for/28180104/choose-slot"
+  },
+  {
+    "outlet_id": "78",
+    "name": "PSA CRS Outlet San Francisco",
+    "region": "CARAGA",
+    "slug": "for",
+    "booking_id": "28180104",
+    "calendar_url": "https://crs-appointment.psahelpline.ph/book/at/CRS%20Outlet%20San%20Francisco%20Agusan%20Del%20Sur/for/28180104/choose-slot"
+  },
+  {
+    "outlet_id": "8",
+    "name": "PSA CRS Outlet San Fernando La Union",
+    "region": "REGION I",
+    "slug": "for",
+    "booking_id": "28180104",
+    "calendar_url": "https://crs-appointment.psahelpline.ph/book/at/City%20of%20San%20Fernando,%20La%20Union/for/28180104/choose-slot"
+  },
+  {
+    "outlet_id": "9",
+    "name": "PSA CRS Outlet Calasiao Pangasinan",
+    "region": "REGION I",
+    "slug": "for",
+    "booking_id": "28180104",
+    "calendar_url": "https://crs-appointment.psahelpline.ph/book/at/Calasiao,%20Pangasinan/for/28180104/choose-slot"
+  },
+  {
+    "outlet_id": "25",
+    "name": "PSA CRS Outlet Vigan",
+    "region": "REGION I",
+    "slug": "for",
+    "booking_id": "28180104",
+    "calendar_url": "https://crs-appointment.psahelpline.ph/book/at/VIGAN/for/28180104/choose-slot"
+  },
+  {
+    "outlet_id": "37",
+    "name": "PSA CRS Outlet Ilocos Norte",
+    "region": "REGION I",
+    "slug": "for",
+    "booking_id": "28180104",
+    "calendar_url": "https://crs-appointment.psahelpline.ph/book/at/ILOCOS%20NORTE/for/28180104/choose-slot"
+  },
+  {
+    "outlet_id": "65",
+    "name": "PSA CRS Outlet Rosales Pangasinan",
+    "region": "REGION I",
+    "slug": "for",
+    "booking_id": "28180104",
+    "calendar_url": "https://crs-appointment.psahelpline.ph/book/at/CRS%20Rosales%20Pangasinan%20Outlet/for/28180104/choose-slot"
+  },
+  {
+    "outlet_id": "85",
+    "name": "PSA CRS Outlet Candon Ilocos Sur",
+    "region": "REGION I",
+    "slug": "for",
+    "booking_id": "28180104",
+    "calendar_url": "https://crs-appointment.psahelpline.ph/book/at/PSA%20CRS%20Outlet%20Candon,%20Ilocos%20Sur/for/28180104/choose-slot"
+  },
+  {
+    "outlet_id": "10",
+    "name": "PSA CRS Outlet Bayombong Nueva Vizcaya",
+    "region": "REGION II",
+    "slug": "for",
+    "booking_id": "28180104",
+    "calendar_url": "https://crs-appointment.psahelpline.ph/book/at/Bayombong,%20Nueva%20Vizcaya/for/28180104/choose-slot"
+  },
+  {
+    "outlet_id": "41",
+    "name": "PSA CRS Outlet Tuguegarao City",
+    "region": "REGION II",
+    "slug": "for",
+    "booking_id": "28180104",
+    "calendar_url": "https://crs-appointment.psahelpline.ph/book/at/TUGUEGARAO%20CITY/for/28180104/choose-slot"
+  },
+  {
+    "outlet_id": "55",
+    "name": "PSA CRS Outlet Quirino",
+    "region": "REGION II",
+    "slug": "for",
+    "booking_id": "28180104",
+    "calendar_url": "https://crs-appointment.psahelpline.ph/book/at/Quirino%20CRS%20Outlet/for/28180104/choose-slot"
+  },
+  {
+    "outlet_id": "61",
+    "name": "PSA CRS Outlet Isabela",
+    "region": "REGION II",
+    "slug": "for",
+    "booking_id": "28180104",
+    "calendar_url": "https://crs-appointment.psahelpline.ph/book/at/PSA-CRS%20Isabela/for/28180104/choose-slot"
+  },
+  {
+    "outlet_id": "11",
+    "name": "PSA CRS Outlet San Fernando Pampanga",
+    "region": "REGION III",
+    "slug": "for",
+    "booking_id": "28180104",
+    "calendar_url": "https://crs-appointment.psahelpline.ph/book/at/San%20Fernando,%20Pampanga/for/28180104/choose-slot"
+  },
+  {
+    "outlet_id": "12",
+    "name": "PSA CRS Outlet Cabanatuan City",
+    "region": "REGION III",
+    "slug": "for",
+    "booking_id": "28180104",
+    "calendar_url": "https://crs-appointment.psahelpline.ph/book/at/Cabanatuan%20City,%20Nueva%20Ecija/for/28180104/choose-slot"
+  },
+  {
+    "outlet_id": "26",
+    "name": "PSA CRS Outlet Olongapo",
+    "region": "REGION III",
+    "slug": "for",
+    "booking_id": "28180104",
+    "calendar_url": "https://crs-appointment.psahelpline.ph/book/at/Olongapo%20Outlet/for/28180104/choose-slot"
+  },
+  {
+    "outlet_id": "50",
+    "name": "PSA CRS Outlet Tarlac City",
+    "region": "REGION III",
+    "slug": "for",
+    "booking_id": "28180104",
+    "calendar_url": "https://crs-appointment.psahelpline.ph/book/at/Tarlac%20City,%20Tarlac/for/28180104/choose-slot"
+  },
+  {
+    "outlet_id": "51",
+    "name": "PSA CRS Outlet Aurora",
+    "region": "REGION III",
+    "slug": "for",
+    "booking_id": "28180104",
+    "calendar_url": "https://crs-appointment.psahelpline.ph/book/at/Aurora%20CRS%20Outlet/for/28180104/choose-slot"
+  },
+  {
+    "outlet_id": "58",
+    "name": "PSA CRS Outlet Bulacan",
+    "region": "REGION III",
+    "slug": "for",
+    "booking_id": "28180104",
+    "calendar_url": "https://crs-appointment.psahelpline.ph/book/at/CRS%20Outlet%20in%20Bulacan/for/28180104/choose-slot"
+  },
+  {
+    "outlet_id": "13",
+    "name": "PSA CRS Outlet Lipa City Batangas",
+    "region": "REGION IV-A",
+    "slug": "for",
+    "booking_id": "28180104",
+    "calendar_url": "https://crs-appointment.psahelpline.ph/book/at/Lipa%20City,%20Batangas/for/28180104/choose-slot"
+  },
+  {
+    "outlet_id": "14",
+    "name": "PSA CRS Outlet Lucena City Quezon",
+    "region": "REGION IV-A",
+    "slug": "for",
+    "booking_id": "28180104",
+    "calendar_url": "https://crs-appointment.psahelpline.ph/book/at/Lucena%20City,%20Quezon/for/28180104/choose-slot"
+  },
+  {
+    "outlet_id": "49",
+    "name": "PSA CRS Outlet Cavite",
+    "region": "REGION IV-A",
+    "slug": "for",
+    "booking_id": "28180104",
+    "calendar_url": "https://crs-appointment.psahelpline.ph/book/at/CAVITE%20OUTLET/for/28180104/choose-slot"
+  },
+  {
+    "outlet_id": "52",
+    "name": "PSA CRS Outlet Antipolo Rizal",
+    "region": "REGION IV-A",
+    "slug": "for",
+    "booking_id": "28180104",
+    "calendar_url": "https://crs-appointment.psahelpline.ph/book/at/Antipolo,%20Rizal%20CRS/for/28180104/choose-slot"
+  },
+  {
+    "outlet_id": "66",
+    "name": "PSA CRS Outlet San Pablo",
+    "region": "REGION IV-A",
+    "slug": "for",
+    "booking_id": "28180104",
+    "calendar_url": "https://crs-appointment.psahelpline.ph/book/at/CRS%20San%20Pablo%20Outlet/for/28180104/choose-slot"
+  },
+  {
+    "outlet_id": "28",
+    "name": "PSA CRS Outlet Calapan",
+    "region": "MIMAROPA",
+    "slug": "for",
+    "booking_id": "28180104",
+    "calendar_url": "https://crs-appointment.psahelpline.ph/book/at/Calapan%20Outlet/for/28180104/choose-slot"
+  },
+  {
+    "outlet_id": "62",
+    "name": "PSA CRS Outlet Mamburao",
+    "region": "MIMAROPA",
+    "slug": "for",
+    "booking_id": "28180104",
+    "calendar_url": "https://crs-appointment.psahelpline.ph/book/at/PSA-CRS%20MAMBURAO%20OUTLET/for/28180104/choose-slot"
+  },
+  {
+    "outlet_id": "63",
+    "name": "PSA CRS Outlet Odiongan",
+    "region": "MIMAROPA",
+    "slug": "for",
+    "booking_id": "28180104",
+    "calendar_url": "https://crs-appointment.psahelpline.ph/book/at/CRS-Odiongan/for/28180104/choose-slot"
+  },
+  {
+    "outlet_id": "84",
+    "name": "PSA CRS Outlet Boac Marinduque",
+    "region": "MIMAROPA",
+    "slug": "for",
+    "booking_id": "28180104",
+    "calendar_url": "https://crs-appointment.psahelpline.ph/book/at/PSA%20CRS%20Outlet%20Boac,%20Marinduque/for/28180104/choose-slot"
+  },
+  {
+    "outlet_id": "38",
+    "name": "PSA CRS Outlet Puerto Princesa",
+    "region": "MIMAROPA",
+    "slug": "for",
+    "booking_id": "28180104",
+    "calendar_url": "https://crs-appointment.psahelpline.ph/book/at/Puerto%20Princesa/for/28180104/choose-slot"
+  },
+  {
+    "outlet_id": "15",
+    "name": "PSA CRS Outlet Legaspi City Albay",
+    "region": "REGION V",
+    "slug": "for",
+    "booking_id": "28180104",
+    "calendar_url": "https://crs-appointment.psahelpline.ph/book/at/Legaspi%20City,%20Albay/for/28180104/choose-slot"
+  },
+  {
+    "outlet_id": "42",
+    "name": "PSA CRS Outlet Naga City",
+    "region": "REGION V",
+    "slug": "for",
+    "booking_id": "28180104",
+    "calendar_url": "https://crs-appointment.psahelpline.ph/book/at/Naga%20City/for/28180104/choose-slot"
+  },
+  {
+    "outlet_id": "48",
+    "name": "PSA CRS Outlet Masbate",
+    "region": "REGION V",
+    "slug": "for",
+    "booking_id": "28180104",
+    "calendar_url": "https://crs-appointment.psahelpline.ph/book/at/Masbate%20Outlet/for/28180104/choose-slot"
+  },
+  {
+    "outlet_id": "54",
+    "name": "PSA CRS Outlet Virac",
+    "region": "REGION V",
+    "slug": "for",
+    "booking_id": "28180104",
+    "calendar_url": "https://crs-appointment.psahelpline.ph/book/at/CRS%20Outlet%20Virac/for/28180104/choose-slot"
+  },
+  {
+    "outlet_id": "71",
+    "name": "PSA CRS Outlet Sorsogon City",
+    "region": "REGION V",
+    "slug": "for",
+    "booking_id": "28180104",
+    "calendar_url": "https://crs-appointment.psahelpline.ph/book/at/CRS%20Outlet%20Sorsogon%20City,%20Sorsogon/for/28180104/choose-slot"
+  },
+  {
+    "outlet_id": "76",
+    "name": "PSA CRS Outlet Daet",
+    "region": "REGION V",
+    "slug": "for",
+    "booking_id": "28180104",
+    "calendar_url": "https://crs-appointment.psahelpline.ph/book/at/CRS%20Outlet%20Daet/for/28180104/choose-slot"
+  },
+  {
+    "outlet_id": "16",
+    "name": "PSA CRS Outlet Iloilo City",
+    "region": "REGION VI",
+    "slug": "for",
+    "booking_id": "28180104",
+    "calendar_url": "https://crs-appointment.psahelpline.ph/book/at/Iloilo%20City,%20Iloilo/for/28180104/choose-slot"
+  },
+  {
+    "outlet_id": "32",
+    "name": "PSA CRS Outlet Kalibo",
+    "region": "REGION VI",
+    "slug": "for",
+    "booking_id": "28180104",
+    "calendar_url": "https://crs-appointment.psahelpline.ph/book/at/KALIBO/for/28180104/choose-slot"
+  },
+  {
+    "outlet_id": "56",
+    "name": "PSA CRS Outlet Antique",
+    "region": "REGION VI",
+    "slug": "for",
+    "booking_id": "28180104",
+    "calendar_url": "https://crs-appointment.psahelpline.ph/book/at/CRS%20Outlet%20-Antique%20/for/28180104/choose-slot"
+  },
+  {
+    "outlet_id": "59",
+    "name": "PSA CRS Outlet Capiz",
+    "region": "REGION VI",
+    "slug": "for",
+    "booking_id": "28180104",
+    "calendar_url": "https://crs-appointment.psahelpline.ph/book/at/CRS%20Outlet%20Capiz/for/28180104/choose-slot"
+  },
+  {
+    "outlet_id": "34",
+    "name": "PSA CRS Outlet Cebu",
+    "region": "REGION VII",
+    "slug": "for",
+    "booking_id": "28180104",
+    "calendar_url": "https://crs-appointment.psahelpline.ph/book/at/Cebu/for/28180104/choose-slot"
+  },
+  {
+    "outlet_id": "45",
+    "name": "PSA CRS Outlet Tagbilaran",
+    "region": "REGION VII",
+    "slug": "for",
+    "booking_id": "28180104",
+    "calendar_url": "https://crs-appointment.psahelpline.ph/book/at/Tagbilaran%20Outlet/for/28180104/choose-slot"
+  },
+  {
+    "outlet_id": "17",
+    "name": "PSA CRS Outlet Tacloban City Leyte",
+    "region": "REGION VIII",
+    "slug": "for",
+    "booking_id": "28180104",
+    "calendar_url": "https://crs-appointment.psahelpline.ph/book/at/Tacloban%20City,%20Leyte/for/28180104/choose-slot"
+  },
+  {
+    "outlet_id": "23",
+    "name": "PSA CRS Outlet Catbalogan",
+    "region": "REGION VIII",
+    "slug": "for",
+    "booking_id": "28180104",
+    "calendar_url": "https://crs-appointment.psahelpline.ph/book/at/Catbalogan%20Civil%20Registration%20Services%20%28CRS%29%20%E2%80%93%20Outlet%20/for/28180104/choose-slot"
+  },
+  {
+    "outlet_id": "68",
+    "name": "PSA CRS Outlet Catarman",
+    "region": "REGION VIII",
+    "slug": "for",
+    "booking_id": "28180104",
+    "calendar_url": "https://crs-appointment.psahelpline.ph/book/at/CRS%20CATARMAN%20OUTLET/for/28180104/choose-slot"
+  },
+  {
+    "outlet_id": "67",
+    "name": "PSA CRS Outlet Borongan",
+    "region": "REGION VIII",
+    "slug": "for",
+    "booking_id": "28180104",
+    "calendar_url": "https://crs-appointment.psahelpline.ph/book/at/CRS%20BORONGAN%20OUTLET/for/28180104/choose-slot"
+  },
+  {
+    "outlet_id": "70",
+    "name": "PSA CRS Outlet Maasin City",
+    "region": "REGION VIII",
+    "slug": "for",
+    "booking_id": "28180104",
+    "calendar_url": "https://crs-appointment.psahelpline.ph/book/at/CRS%20Maasin%20City%20/for/28180104/choose-slot"
+  },
+  {
+    "outlet_id": "75",
+    "name": "PSA CRS Outlet Naval Biliran",
+    "region": "REGION VIII",
+    "slug": "for",
+    "booking_id": "28180104",
+    "calendar_url": "https://crs-appointment.psahelpline.ph/book/at/CRS%20Outlet%20Naval,%20Biliran/for/28180104/choose-slot"
+  },
+  {
+    "outlet_id": "22",
+    "name": "PSA CRS Outlet Zamboanga City",
+    "region": "REGION IX",
+    "slug": "for",
+    "booking_id": "28180104",
+    "calendar_url": "https://crs-appointment.psahelpline.ph/book/at/Zamboanga%20City/for/28180104/choose-slot"
+  },
+  {
+    "outlet_id": "40",
+    "name": "PSA CRS Outlet Dipolog City",
+    "region": "REGION IX",
+    "slug": "for",
+    "booking_id": "28180104",
+    "calendar_url": "https://crs-appointment.psahelpline.ph/book/at/Dipolog%20City/for/28180104/choose-slot"
+  },
+  {
+    "outlet_id": "44",
+    "name": "PSA CRS Outlet Pagadian City",
+    "region": "REGION IX",
+    "slug": "for",
+    "booking_id": "28180104",
+    "calendar_url": "https://crs-appointment.psahelpline.ph/book/at/Pagadian%20City/for/28180104/choose-slot"
+  },
+  {
+    "outlet_id": "80",
+    "name": "PSA CRS Outlet Ipil",
+    "region": "REGION IX",
+    "slug": "for",
+    "booking_id": "28180104",
+    "calendar_url": "https://crs-appointment.psahelpline.ph/book/at/PSA%20CRS%20Outlet%20Ipil/for/28180104/choose-slot"
+  },
+  {
+    "outlet_id": "87",
+    "name": "PSA CRS Outlet Sulu",
+    "region": "REGION IX",
+    "slug": "for",
+    "booking_id": "28180104",
+    "calendar_url": "https://crs-appointment.psahelpline.ph/book/at/CRS%20Outlet%20Sulu/for/28180104/choose-slot"
+  },
+  {
+    "outlet_id": "18",
+    "name": "PSA CRS Outlet Cagayan De Oro City",
+    "region": "REGION X",
+    "slug": "for",
+    "booking_id": "28180104",
+    "calendar_url": "https://crs-appointment.psahelpline.ph/book/at/Cagayan%20de%20Oro%20City,%20Misamis%20Oriental/for/28180104/choose-slot"
+  },
+  {
+    "outlet_id": "27",
+    "name": "PSA CRS Outlet Malaybalay City",
+    "region": "REGION X",
+    "slug": "for",
+    "booking_id": "28180104",
+    "calendar_url": "https://crs-appointment.psahelpline.ph/book/at/Malaybalay%20City/for/28180104/choose-slot"
+  },
+  {
+    "outlet_id": "30",
+    "name": "PSA CRS Outlet Iligan City",
+    "region": "REGION X",
+    "slug": "for",
+    "booking_id": "28180104",
+    "calendar_url": "https://crs-appointment.psahelpline.ph/book/at/Iligan%20City/for/28180104/choose-slot"
+  },
+  {
+    "outlet_id": "33",
+    "name": "PSA CRS Outlet Ozamiz",
+    "region": "REGION X",
+    "slug": "for",
+    "booking_id": "28180104",
+    "calendar_url": "https://crs-appointment.psahelpline.ph/book/at/Ozamiz/for/28180104/choose-slot"
+  },
+  {
+    "outlet_id": "83",
+    "name": "PSA CRS Outlet Mambajao Camiguin",
+    "region": "REGION X",
+    "slug": "for",
+    "booking_id": "28180104",
+    "calendar_url": "https://crs-appointment.psahelpline.ph/book/at/PSA%20CRS%20Outlet%20Mambajao,%20Camiguin/for/28180104/choose-slot"
+  },
+  {
+    "outlet_id": "19",
+    "name": "PSA CRS Outlet Davao City",
+    "region": "REGION XI",
+    "slug": "for",
+    "booking_id": "28180104",
+    "calendar_url": "https://crs-appointment.psahelpline.ph/book/at/Davao%20City/for/28180104/choose-slot"
+  },
+  {
+    "outlet_id": "43",
+    "name": "PSA CRS Outlet Tagum",
+    "region": "REGION XI",
+    "slug": "for",
+    "booking_id": "28180104",
+    "calendar_url": "https://crs-appointment.psahelpline.ph/book/at/Tagum%20Outlet/for/28180104/choose-slot"
+  },
+  {
+    "outlet_id": "64",
+    "name": "PSA CRS Outlet Digos",
+    "region": "REGION XI",
+    "slug": "for",
+    "booking_id": "28180104",
+    "calendar_url": "https://crs-appointment.psahelpline.ph/book/at/CRS%20Digos%20Outlet/for/28180104/choose-slot"
+  },
+  {
+    "outlet_id": "74",
+    "name": "PSA CRS Outlet Mati City",
+    "region": "REGION XI",
+    "slug": "for",
+    "booking_id": "28180104",
+    "calendar_url": "https://crs-appointment.psahelpline.ph/book/at/CRS%20Outlet%20Mati%20City/for/28180104/choose-slot"
+  },
+  {
+    "outlet_id": "77",
+    "name": "PSA CRS Outlet Malita Davao Occidental",
+    "region": "REGION XI",
+    "slug": "for",
+    "booking_id": "28180104",
+    "calendar_url": "https://crs-appointment.psahelpline.ph/book/at/PSA%20CRS%20Outlet%20Malita,%20Davao%20Occidental/for/28180104/choose-slot"
+  },
+  {
+    "outlet_id": "82",
+    "name": "PSA CRS Outlet Nabunturan Davao De Oro",
+    "region": "REGION XI",
+    "slug": "for",
+    "booking_id": "28180104",
+    "calendar_url": "https://crs-appointment.psahelpline.ph/book/at/PSA%20CRS%20Outlet%20Nabunturan,%20Davao%20de%20Oro/for/28180104/choose-slot"
+  },
+  {
+    "outlet_id": "20",
+    "name": "PSA CRS Outlet General Santos City",
+    "region": "REGION XII",
+    "slug": "for",
+    "booking_id": "28180104",
+    "calendar_url": "https://crs-appointment.psahelpline.ph/book/at/General%20Santos%20City,%20South%20Cotabato/for/28180104/choose-slot"
+  },
+  {
+    "outlet_id": "57",
+    "name": "PSA CRS Outlet Kidapawan City",
+    "region": "REGION XII",
+    "slug": "for",
+    "booking_id": "28180104",
+    "calendar_url": "https://crs-appointment.psahelpline.ph/book/at/CRS%20Outlet%20Kidapawan%20City/for/28180104/choose-slot"
+  },
+  {
+    "outlet_id": "69",
+    "name": "PSA CRS Outlet Tacurong City",
+    "region": "REGION XII",
+    "slug": "for",
+    "booking_id": "28180104",
+    "calendar_url": "https://crs-appointment.psahelpline.ph/book/at/CRS-TACURONG%20CITY,%20SULTAN%20KUDARAT/for/28180104/choose-slot"
+  },
+  {
+    "outlet_id": "47",
+    "name": "PSA CRS Outlet Koronadal",
+    "region": "REGION XII",
+    "slug": "for",
+    "booking_id": "28180104",
+    "calendar_url": "https://crs-appointment.psahelpline.ph/book/at/KORONADAL%20OUTLET/for/28180104/choose-slot"
+  },
+  {
+    "outlet_id": "31",
+    "name": "PSA CRS Outlet Bacolod City",
+    "region": "Negros Island Region",
+    "slug": "for",
+    "booking_id": "28180104",
+    "calendar_url": "https://crs-appointment.psahelpline.ph/book/at/Bacolod%20CIty/for/28180104/choose-slot"
+  },
+  {
+    "outlet_id": "39",
+    "name": "PSA CRS Outlet Dumaguete City",
+    "region": "Negros Island Region",
+    "slug": "for",
+    "booking_id": "28180104",
+    "calendar_url": "https://crs-appointment.psahelpline.ph/book/at/DUMAGUETE%20CITY/for/28180104/choose-slot"
+  }
+]
