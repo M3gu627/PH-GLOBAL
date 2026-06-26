@@ -1,0 +1,40 @@
+name: PSA Scraper
+
+on:
+  schedule:
+    - cron: '0 */3 * * *'  # every 3 hours
+  workflow_dispatch:        # allow manual trigger from GitHub Actions tab
+
+jobs:
+  scrape:
+    runs-on: ubuntu-latest
+
+    env:
+      SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+      SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}
+
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: |
+          pip install playwright supabase requests
+          python -m playwright install chromium
+          python -m playwright install-deps chromium
+
+      - name: Run PSA scraper
+        run: python scraper/psa_scraper.py
+
+      - name: Upload cookies artifact (for debugging)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: psa-cookies
+          path: scraper/psa_cookies.json
+          if-no-files-found: ignore

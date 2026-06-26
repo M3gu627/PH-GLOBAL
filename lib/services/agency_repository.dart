@@ -186,6 +186,8 @@ const _birSiteNames = {
 class AgencyRepository {
   static final _client = Supabase.instance.client;
 
+  // ── Fetch all agencies (used on app startup) ──────────────────────────────
+
   static Future<List<Agency>> fetchAgencies() async {
     final results = await Future.wait([
       _client.from('agencies').select(),
@@ -211,42 +213,79 @@ class AgencyRepository {
     return agenciesData.map((row) {
       final agencyId = row['id'] as String;
       final agencySlots = slotsByAgency[agencyId] ?? [];
-
-      final allDates = agencySlots
-          .map((s) => DateTime.parse(s['slot_date'] as String))
-          .toList();
-
-      List<DfaSite> sites = [];
-
-      if (agencyId == 'dfa') {
-        sites = _buildSites(agencySlots, _dfaSiteNames);
-      } else if (agencyId == 'bir') {
-        sites = _buildSites(agencySlots, _birSiteNames);
-      }
-
-      return Agency(
-        id: agencyId,
-        name: row['name'],
-        description: row['description'] ?? '',
-        websiteUrl: row['website_url'],
-        icon: _iconFromName(row['icon_name']),
-        availableDates: allDates,
-        sites: sites,
-      );
+      return _buildAgency(row, agencySlots);
     }).toList();
   }
 
-  // Shared site-building logic for DFA and BIR
+  // ── Refresh a single agency (called after FCM notification) ──────────────
+  //
+  // Only fetches slots for the one agency so it's fast and cheap.
+
+  static Future<Agency> refreshAgency(String agencyId) async {
+    final results = await Future.wait([
+      _client.from('agencies').select().eq('id', agencyId).single(),
+      _client
+          .from('slots')
+          .select('agency_id, site_id, slot_date')
+          .eq('agency_id', agencyId)
+          .order('slot_date', ascending: true),
+    ]);
+
+    final agencyData = results[0] as Map<String, dynamic>;
+    final slotsData = (results[1] as List<dynamic>).cast<Map<String, dynamic>>();
+
+    debugPrint('Refreshed $agencyId — ${slotsData.length} slots');
+
+    return _buildAgency(agencyData, slotsData);
+  }
+
+  // ── Shared builder ────────────────────────────────────────────────────────
+
+  static Agency _buildAgency(
+    Map<String, dynamic> row,
+    List<Map<String, dynamic>> agencySlots,
+  ) {
+    final agencyId = row['id'] as String;
+
+    final allDates = agencySlots
+        .map((s) => DateTime.parse(s['slot_date'] as String))
+        .toList();
+
+    List<DfaSite> sites = [];
+    if (agencyId == 'dfa') {
+      sites = _buildSites(agencySlots, _dfaSiteNames);
+    } else if (agencyId == 'bir') {
+      sites = _buildSites(agencySlots, _birSiteNames);
+    }
+
+    return Agency(
+      id: agencyId,
+      name: row['name'],
+      description: row['description'] ?? '',
+      websiteUrl: row['website_url'],
+      icon: _iconFromName(row['icon_name']),
+      availableDates: allDates,
+      sites: sites,
+    );
+  }
+
+  // ── Site-building logic for DFA and BIR ──────────────────────────────────
+
   static List<DfaSite> _buildSites(
     List<Map<String, dynamic>> agencySlots,
     Map<String, String> siteNames,
   ) {
     final slotsBySite = <String, List<DateTime>>{};
     for (final s in agencySlots) {
-      final siteId = s['site_id'] as String?;
-      if (siteId == null) continue;
+      final rawSiteId = s['site_id'] as String?;
+      if (rawSiteId == null) continue;
+      // site_id in DB is stored as e.g. "dfa_489" or "bir_RDO001..." —
+      // strip the agency prefix to match the keys in _dfaSiteNames / _birSiteNames
+      final siteKey = rawSiteId.contains('_')
+          ? rawSiteId.substring(rawSiteId.indexOf('_') + 1)
+          : rawSiteId;
       slotsBySite
-          .putIfAbsent(siteId, () => [])
+          .putIfAbsent(siteKey, () => [])
           .add(DateTime.parse(s['slot_date'] as String));
     }
 
@@ -263,10 +302,10 @@ class AgencyRepository {
   static IconData _iconFromName(String? name) {
     switch (name) {
       case 'flight_takeoff': return Icons.flight_takeoff;
-      case 'fingerprint': return Icons.fingerprint;
+      case 'fingerprint':    return Icons.fingerprint;
       case 'local_hospital': return Icons.local_hospital;
-      case 'account_balance': return Icons.account_balance;
-      default: return Icons.business;
+      case 'account_balance':return Icons.account_balance;
+      default:               return Icons.business;
     }
   }
 }

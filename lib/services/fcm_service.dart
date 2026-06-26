@@ -1,5 +1,4 @@
 import 'package:firebase_messaging/firebase_messaging.dart';
-import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
@@ -12,22 +11,74 @@ class FcmService {
   static final _messaging = FirebaseMessaging.instance;
   static final _client = Supabase.instance.client;
 
+  // ── Refresh callbacks ─────────────────────────────────────────────────────
+  //
+  // Any screen can register itself here. When a notification arrives for
+  // a given agency_id, all matching callbacks are fired so the screen
+  // re-fetches fresh data from Supabase.
+  //
+  // Usage in a screen:
+  //   FcmService.registerRefreshCallback('dfa', _refreshData);
+  //   // and in dispose():
+  //   FcmService.unregisterRefreshCallback('dfa', _refreshData);
+
+  static final _refreshCallbacks = <String, List<VoidCallback>>{};
+
+  static void registerRefreshCallback(String agencyId, VoidCallback callback) {
+    _refreshCallbacks.putIfAbsent(agencyId, () => []).add(callback);
+    debugPrint('FCM: registered refresh callback for $agencyId');
+  }
+
+  static void unregisterRefreshCallback(String agencyId, VoidCallback callback) {
+    _refreshCallbacks[agencyId]?.remove(callback);
+    debugPrint('FCM: unregistered refresh callback for $agencyId');
+  }
+
+  static void _triggerRefresh(String? agencyId) {
+    if (agencyId == null) return;
+    final callbacks = _refreshCallbacks[agencyId];
+    if (callbacks == null || callbacks.isEmpty) {
+      debugPrint('FCM: no refresh callbacks registered for $agencyId');
+      return;
+    }
+    debugPrint('FCM: triggering ${callbacks.length} refresh callback(s) for $agencyId');
+    for (final cb in List.of(callbacks)) {
+      cb();
+    }
+  }
+
+  // ── Init ──────────────────────────────────────────────────────────────────
+
   static Future<void> init() async {
     FirebaseMessaging.onBackgroundMessage(_firebaseMessagingBackgroundHandler);
 
+    // Foreground notification — show banner AND refresh the open screen
     FirebaseMessaging.onMessage.listen((message) {
       final notification = message.notification;
-      if (notification == null) return;
-      debugPrint('Foreground message: ${notification.title} — ${notification.body}');
-      _showInAppBanner(notification.title, notification.body);
+      final agencyId = message.data['agency_id'] as String?;
+
+      debugPrint('Foreground message: ${notification?.title} | agency=$agencyId');
+
+      // 1. Refresh the currently open agency detail screen (if it matches)
+      _triggerRefresh(agencyId);
+
+      // 2. Show in-app banner
+      if (notification != null) {
+        _showInAppBanner(notification.title, notification.body);
+      }
     });
 
+    // Tapped notification while app was in background — also refresh
     FirebaseMessaging.onMessageOpenedApp.listen((message) {
-      debugPrint('Notification tapped: ${message.notification?.title}');
+      final agencyId = message.data['agency_id'] as String?;
+      debugPrint('Notification tapped: ${message.notification?.title} | agency=$agencyId');
+      _triggerRefresh(agencyId);
     });
 
     debugPrint('FCM listeners initialized');
   }
+
+  // ── Permission & token ────────────────────────────────────────────────────
 
   static Future<void> requestPermission() async {
     final settings = await _messaging.requestPermission(
@@ -46,6 +97,8 @@ class FcmService {
     }
   }
 
+  // ── Subscribe / Unsubscribe ───────────────────────────────────────────────
+
   static Future<void> subscribeToAgency(String agencyId, {String? siteId}) async {
     final token = await _messaging.getToken();
     if (token == null) {
@@ -57,7 +110,7 @@ class FcmService {
       {
         'agency_id': agencyId,
         'fcm_token': token,
-        if (siteId != null) 'site_id': siteId,
+        'site_id': siteId,
       },
       onConflict: 'agency_id,fcm_token,site_id',
     );
@@ -81,6 +134,8 @@ class FcmService {
     debugPrint('Unsubscribed: agency=$agencyId site=$siteId');
   }
 
+  // ── In-app banner ─────────────────────────────────────────────────────────
+
   static final _overlayKey = GlobalKey<NavigatorState>();
   static GlobalKey<NavigatorState> get navigatorKey => _overlayKey;
 
@@ -95,7 +150,9 @@ class FcmService {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             if (title != null)
-              Text(title, style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.white)),
+              Text(title,
+                  style: const TextStyle(
+                      fontWeight: FontWeight.bold, color: Colors.white)),
             if (body != null)
               Text(body, style: const TextStyle(color: Colors.white70)),
           ],

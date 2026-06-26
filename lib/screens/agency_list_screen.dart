@@ -166,7 +166,7 @@ class _AgencyListScreenState extends State<AgencyListScreen> {
             child: ListView.separated(
               padding: const EdgeInsets.all(16),
               itemCount: agencies.length,
-              separatorBuilder: (_, __) => const SizedBox(height: 12),
+              separatorBuilder: (_, _) => const SizedBox(height: 12),
               itemBuilder: (context, index) {
                 final agency = agencies[index];
                 return _AgencyCard(
@@ -305,7 +305,7 @@ class _NotificationsSheetState extends State<_NotificationsSheet> {
                       padding: const EdgeInsets.symmetric(
                           horizontal: 16, vertical: 8),
                       itemCount: _keys.length,
-                      separatorBuilder: (_, __) =>
+                      separatorBuilder: (_, _) =>
                           const Divider(color: Color(0xFF2A2A2A)),
                       itemBuilder: (context, index) {
                         final key = _keys.elementAt(index);
