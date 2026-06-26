@@ -12,6 +12,7 @@ jobs:
     env:
       SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
       SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}
+      PSA_HEADLESS: 'true'   # force headless on CI
 
     steps:
       - name: Checkout repo
