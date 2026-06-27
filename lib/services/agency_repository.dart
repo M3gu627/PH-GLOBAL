@@ -183,7 +183,6 @@ const _birSiteNames = {
   'RDO115AssessmentSectionASeAppointmentPortal@bir.gov.ph': 'RDO No. 115 – Digos City, Davao del Sur',
 };
 
-// PSA outlet names keyed by outlet_id (matches psa_outlet_ids.json)
 const _psaSiteNames = {
   '4':  'North Caloocan',
   '5':  'Muntinlupa',
@@ -293,7 +292,9 @@ class AgencyRepository {
     final slotsByAgency = <String, List<Map<String, dynamic>>>{};
     for (final s in slotsData) {
       final agencyId = s['agency_id'] as String;
-      slotsByAgency.putIfAbsent(agencyId, () => []).add(s as Map<String, dynamic>);
+      slotsByAgency
+          .putIfAbsent(agencyId, () => [])
+          .add(s as Map<String, dynamic>);
     }
 
     return agenciesData.map((row) {
@@ -316,7 +317,8 @@ class AgencyRepository {
     ]);
 
     final agencyData = results[0] as Map<String, dynamic>;
-    final slotsData = (results[1] as List<dynamic>).cast<Map<String, dynamic>>();
+    final slotsData =
+        (results[1] as List<dynamic>).cast<Map<String, dynamic>>();
 
     debugPrint('Refreshed $agencyId — ${slotsData.length} slots');
 
@@ -337,13 +339,17 @@ class AgencyRepository {
 
     List<DfaSite> sites = [];
     if (agencyId == 'dfa') {
+      // DFA site IDs are plain numbers: "dfa_489" → key "489"
+      // DfaSite.id stays as plain key e.g. "489"
       sites = _buildSites(agencySlots, _dfaSiteNames);
     } else if (agencyId == 'bir') {
+      // BIR site IDs are email slugs: "bir_RDO001..." → key "RDO001..."
+      // DfaSite.id stays as plain key e.g. "RDO001..."
       sites = _buildSites(agencySlots, _birSiteNames);
     } else if (agencyId == 'psa') {
-      // PSA site_id format: "psa_4", "psa_5" etc.
-      // Strip "psa_" prefix to match _psaSiteNames keys
-      sites = _buildSites(agencySlots, _psaSiteNames);
+      // PSA site IDs are "psa_4", "psa_5" etc. → key "4", "5"
+      // DfaSite.id stored as full "psa_4" so notify key matches
+      sites = _buildSites(agencySlots, _psaSiteNames, siteIdPrefix: 'psa');
     }
 
     return Agency(
@@ -357,17 +363,18 @@ class AgencyRepository {
     );
   }
 
-  // ── Site-building logic ───────────────────────────────────────────────────
+  // ── Site builder ──────────────────────────────────────────────────────────
 
   static List<DfaSite> _buildSites(
     List<Map<String, dynamic>> agencySlots,
-    Map<String, String> siteNames,
-  ) {
+    Map<String, String> siteNames, {
+    String siteIdPrefix = '', // pass 'psa' for PSA, leave empty for DFA/BIR
+  }) {
+    // Group dates by stripped site key (e.g. "489" from "dfa_489")
     final slotsBySite = <String, List<DateTime>>{};
     for (final s in agencySlots) {
       final rawSiteId = s['site_id'] as String?;
       if (rawSiteId == null) continue;
-      // Strip agency prefix: "dfa_489" → "489", "psa_4" → "4"
       final siteKey = rawSiteId.contains('_')
           ? rawSiteId.substring(rawSiteId.indexOf('_') + 1)
           : rawSiteId;
@@ -377,8 +384,14 @@ class AgencyRepository {
     }
 
     return siteNames.entries.map((entry) {
+      // DFA/BIR: id = plain key ("489")
+      // PSA:     id = "psa_4" so it matches the notify subscription key
+      final siteId = siteIdPrefix.isEmpty
+          ? entry.key
+          : '${siteIdPrefix}_${entry.key}';
+
       return DfaSite(
-        id: 'psa_${entry.key}', // keep full site_id for PSA notify key
+        id: siteId,
         name: entry.value,
         availableDates: slotsBySite[entry.key] ?? [],
       );
@@ -388,11 +401,11 @@ class AgencyRepository {
 
   static IconData _iconFromName(String? name) {
     switch (name) {
-      case 'flight_takeoff': return Icons.flight_takeoff;
-      case 'fingerprint':    return Icons.fingerprint;
-      case 'local_hospital': return Icons.local_hospital;
-      case 'account_balance':return Icons.account_balance;
-      default:               return Icons.business;
+      case 'flight_takeoff':  return Icons.flight_takeoff;
+      case 'fingerprint':     return Icons.fingerprint;
+      case 'local_hospital':  return Icons.local_hospital;
+      case 'account_balance': return Icons.account_balance;
+      default:                return Icons.business;
     }
   }
 }
