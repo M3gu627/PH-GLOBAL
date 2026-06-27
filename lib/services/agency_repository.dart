@@ -183,6 +183,92 @@ const _birSiteNames = {
   'RDO115AssessmentSectionASeAppointmentPortal@bir.gov.ph': 'RDO No. 115 – Digos City, Davao del Sur',
 };
 
+// PSA outlet names keyed by outlet_id (matches psa_outlet_ids.json)
+const _psaSiteNames = {
+  '4':  'North Caloocan',
+  '5':  'Muntinlupa',
+  '6':  'Paranaque',
+  '7':  'Valenzuela',
+  '24': 'Cotabato City',
+  '73': 'Bongao Tawi-Tawi',
+  '79': 'Marawi City',
+  '35': 'Baguio City',
+  '36': 'Abra',
+  '53': 'Tabuk City Kalinga',
+  '81': 'Mobile UP Baguio',
+  '86': 'Luna Apayao',
+  '21': 'Butuan City',
+  '46': 'Surigao City',
+  '72': 'Tandag City',
+  '78': 'San Francisco',
+  '8':  'San Fernando La Union',
+  '9':  'Calasiao Pangasinan',
+  '25': 'Vigan',
+  '37': 'Ilocos Norte',
+  '65': 'Rosales Pangasinan',
+  '85': 'Candon Ilocos Sur',
+  '10': 'Bayombong Nueva Vizcaya',
+  '41': 'Tuguegarao City',
+  '55': 'Quirino',
+  '61': 'Isabela',
+  '11': 'San Fernando Pampanga',
+  '12': 'Cabanatuan City',
+  '26': 'Olongapo',
+  '50': 'Tarlac City',
+  '51': 'Aurora',
+  '58': 'Bulacan',
+  '13': 'Lipa City Batangas',
+  '14': 'Lucena City Quezon',
+  '49': 'Cavite',
+  '52': 'Antipolo Rizal',
+  '66': 'San Pablo',
+  '28': 'Calapan',
+  '62': 'Mamburao',
+  '63': 'Odiongan',
+  '84': 'Boac Marinduque',
+  '38': 'Puerto Princesa',
+  '15': 'Legaspi City Albay',
+  '42': 'Naga City',
+  '48': 'Masbate',
+  '54': 'Virac',
+  '71': 'Sorsogon City',
+  '76': 'Daet',
+  '16': 'Iloilo City',
+  '32': 'Kalibo',
+  '56': 'Antique',
+  '59': 'Capiz',
+  '34': 'Cebu',
+  '45': 'Tagbilaran',
+  '17': 'Tacloban City Leyte',
+  '23': 'Catbalogan',
+  '68': 'Catarman',
+  '67': 'Borongan',
+  '70': 'Maasin City',
+  '75': 'Naval Biliran',
+  '22': 'Zamboanga City',
+  '40': 'Dipolog City',
+  '44': 'Pagadian City',
+  '80': 'Ipil',
+  '87': 'Sulu',
+  '18': 'Cagayan De Oro City',
+  '27': 'Malaybalay City',
+  '30': 'Iligan City',
+  '33': 'Ozamiz',
+  '83': 'Mambajao Camiguin',
+  '19': 'Davao City',
+  '43': 'Tagum',
+  '64': 'Digos',
+  '74': 'Mati City',
+  '77': 'Malita Davao Occidental',
+  '82': 'Nabunturan Davao De Oro',
+  '20': 'General Santos City',
+  '57': 'Kidapawan City',
+  '69': 'Tacurong City',
+  '47': 'Koronadal',
+  '31': 'Bacolod City',
+  '39': 'Dumaguete City',
+};
+
 class AgencyRepository {
   static final _client = Supabase.instance.client;
 
@@ -217,9 +303,7 @@ class AgencyRepository {
     }).toList();
   }
 
-  // ── Refresh a single agency (called after FCM notification) ──────────────
-  //
-  // Only fetches slots for the one agency so it's fast and cheap.
+  // ── Refresh a single agency ───────────────────────────────────────────────
 
   static Future<Agency> refreshAgency(String agencyId) async {
     final results = await Future.wait([
@@ -256,6 +340,10 @@ class AgencyRepository {
       sites = _buildSites(agencySlots, _dfaSiteNames);
     } else if (agencyId == 'bir') {
       sites = _buildSites(agencySlots, _birSiteNames);
+    } else if (agencyId == 'psa') {
+      // PSA site_id format: "psa_4", "psa_5" etc.
+      // Strip "psa_" prefix to match _psaSiteNames keys
+      sites = _buildSites(agencySlots, _psaSiteNames);
     }
 
     return Agency(
@@ -269,7 +357,7 @@ class AgencyRepository {
     );
   }
 
-  // ── Site-building logic for DFA and BIR ──────────────────────────────────
+  // ── Site-building logic ───────────────────────────────────────────────────
 
   static List<DfaSite> _buildSites(
     List<Map<String, dynamic>> agencySlots,
@@ -279,8 +367,7 @@ class AgencyRepository {
     for (final s in agencySlots) {
       final rawSiteId = s['site_id'] as String?;
       if (rawSiteId == null) continue;
-      // site_id in DB is stored as e.g. "dfa_489" or "bir_RDO001..." —
-      // strip the agency prefix to match the keys in _dfaSiteNames / _birSiteNames
+      // Strip agency prefix: "dfa_489" → "489", "psa_4" → "4"
       final siteKey = rawSiteId.contains('_')
           ? rawSiteId.substring(rawSiteId.indexOf('_') + 1)
           : rawSiteId;
@@ -291,7 +378,7 @@ class AgencyRepository {
 
     return siteNames.entries.map((entry) {
       return DfaSite(
-        id: entry.key,
+        id: 'psa_${entry.key}', // keep full site_id for PSA notify key
         name: entry.value,
         availableDates: slotsBySite[entry.key] ?? [],
       );
