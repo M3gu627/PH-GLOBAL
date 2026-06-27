@@ -75,7 +75,6 @@ SUPABASE_HEADERS = {
     "Content-Type": "application/json",
 }
 
-# Batch slicing — set by GitHub Actions matrix
 BATCH_INDEX = int(os.environ.get("BATCH_INDEX", "0"))
 BATCH_TOTAL = int(os.environ.get("BATCH_TOTAL", "1"))
 
@@ -160,7 +159,7 @@ def send_push_notification(tokens, new_dates, access_token, site_name):
 
 
 # ---------------------------------------------------------------------------
-# Core scrape logic for a single site (one attempt)
+# Core scrape logic
 # ---------------------------------------------------------------------------
 
 async def scrape_site_once(browser, site) -> list[str]:
@@ -185,6 +184,8 @@ async def scrape_site_once(browser, site) -> list[str]:
                 data = await response.json()
                 api_response.extend(data)
                 print(f"    [{site_id}] Intercepted {len(data)} slot records")
+                # DEBUG: print first 3 records to inspect full structure
+                print(f"    [{site_id}] Sample records: {json.dumps(data[:3], indent=2)}")
                 slot_received.set()
             except Exception as e:
                 print(f"    [{site_id}] Could not parse timeslot response: {e}")
@@ -256,7 +257,7 @@ async def scrape_site_once(browser, site) -> list[str]:
 
 
 # ---------------------------------------------------------------------------
-# Retry wrapper with exponential backoff
+# Retry wrapper
 # ---------------------------------------------------------------------------
 
 async def scrape_site_with_retry(browser, site) -> tuple[str, list[str] | None]:
@@ -340,7 +341,6 @@ async def fetch_all_dates_async(sites_to_scrape) -> dict:
             })
 
             print(f"  [{site_id}] {status} | {slot_count} slots found | took {site_elapsed}s")
-
             await asyncio.sleep(2)
 
     total_elapsed = (datetime.now() - batch_start).seconds
@@ -375,13 +375,11 @@ def run():
     batch_sites = get_sites_for_this_batch(DFA_SITES)
     print(f"  Batch covers {len(batch_sites)} sites: {[s['id'] for s in batch_sites]}")
 
-    # Scrape all sites — no subscriber filter
     sites_to_scrape = batch_sites
     print(f"  Scraping all {len(sites_to_scrape)} sites in batch")
 
     all_results = asyncio.run(fetch_all_dates_async(sites_to_scrape))
 
-    # Diff against Supabase
     current_slots = get_current_slots()
     scraped_slots = {
         (site_id, d)
@@ -404,7 +402,6 @@ def run():
     for site_id, d in removed_slots:
         delete_slot(d, site_id)
 
-    # FCM push for each site with new slots
     if new_slots:
         access_token = get_fcm_access_token()
         notified_sites: set[str] = set()
