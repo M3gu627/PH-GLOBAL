@@ -16,7 +16,6 @@ const _psaRegions = [
   'REGION XII', 'Negros Island Region',
 ];
 
-// Maps region → list of outlet_ids in that region
 const _psaOutletIdsByRegion = <String, List<String>>{
   'NCR':                  ['4', '5', '6', '7'],
   'BARMM':                ['24', '73', '79'],
@@ -87,6 +86,9 @@ class _AgencyDetailScreenState extends State<AgencyDetailScreen> {
       _selectedSite = _agency.sites.first;
     }
     FcmService.registerRefreshCallback(_agency.id, _onFcmRefresh);
+
+    // Auto-refresh on open so data is always current
+    WidgetsBinding.instance.addPostFrameCallback((_) => _refreshData());
   }
 
   @override
@@ -142,7 +144,10 @@ class _AgencyDetailScreenState extends State<AgencyDetailScreen> {
   bool get _hasSites => _agency.sites.isNotEmpty;
 
   String get _notifyKey {
-    if (_isPsa && _psaOutlet != null) return '${_agency.id}_${_psaOutlet!.id}';
+    if (_isPsa && _psaOutlet != null) {
+      // _psaOutlet.id is already 'psa_4' — use it directly
+      return _psaOutlet!.id;
+    }
     return _hasSites && _selectedSite != null
         ? '${_agency.id}_${_selectedSite!.id}'
         : _agency.id;
@@ -151,7 +156,6 @@ class _AgencyDetailScreenState extends State<AgencyDetailScreen> {
   String get _dropdownLabel =>
       _agency.id == 'bir' ? 'Select RDO' : 'Select Location';
 
-  // Outlets for currently selected PSA region, looked up from loaded sites
   List<DfaSite> get _psaRegionOutlets {
     if (_psaRegion == null) return [];
     final ids = _psaOutletIdsByRegion[_psaRegion!] ?? [];
@@ -406,7 +410,7 @@ class _AgencyDetailScreenState extends State<AgencyDetailScreen> {
     );
   }
 
-  // ── Reusable dropdown — anchored, max-height constrained ─────────────────
+  // ── Reusable dropdown ─────────────────────────────────────────────────────
 
   Widget _buildDropdown<T>({
     required String label,
@@ -418,7 +422,7 @@ class _AgencyDetailScreenState extends State<AgencyDetailScreen> {
     return DropdownButtonFormField<T>(
       value: value,
       isExpanded: true,
-      menuMaxHeight: 300,          // ← anchors menu, prevents overflow
+      menuMaxHeight: 300,
       dropdownColor: const Color(0xFF1A1A1A),
       decoration: InputDecoration(
         labelText: label,
