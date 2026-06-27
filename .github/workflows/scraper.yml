@@ -2,7 +2,7 @@ name: DFA Slot Scraper
 
 on:
   schedule:
-    - cron: '*/30 * * * *'
+    - cron: '0 * * * *'  # every hour on the hour
   workflow_dispatch:
 
 jobs:
@@ -11,7 +11,7 @@ jobs:
   # ------------------------------------------------------------------
   setup:
     runs-on: ubuntu-latest
-    timeout-minutes: 5
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
 
@@ -51,7 +51,7 @@ jobs:
   scrape:
     needs: setup
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 20
     strategy:
       fail-fast: false
       matrix:
