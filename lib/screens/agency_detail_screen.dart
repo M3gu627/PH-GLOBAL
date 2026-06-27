@@ -106,7 +106,10 @@ class _AgencyDetailScreenState extends State<AgencyDetailScreen> {
     setState(() => _isRefreshing = true);
     try {
       final updated = await AgencyRepository.refreshAgency(_agency.id);
-      if (!mounted) return;
+      if (!mounted) {
+        // Widget unmounted mid-fetch — can't call setState but flag is lost anyway
+        return;
+      }
       setState(() {
         _agency = updated;
         if (_isPsa) {
@@ -124,11 +127,12 @@ class _AgencyDetailScreenState extends State<AgencyDetailScreen> {
           _selectedSite ??=
               updated.sites.isNotEmpty ? updated.sites.first : null;
         }
-        _isRefreshing = false;
+        _isRefreshing = false; // always resets here on success
       });
     } catch (e) {
       debugPrint('Refresh failed: $e');
-      if (mounted) setState(() => _isRefreshing = false);
+      if (!mounted) return;
+      setState(() => _isRefreshing = false);
     }
   }
 
